@@ -71,7 +71,7 @@ The exported document should be simple, organized, and professional.
 
 - **Frontend:** Next.js
 - **AI Image Processing:** Gemini
-- **Backend / Database / Auth / Storage:** Firebase
+- **Backend / Database / Auth / Storage:** not configured yet
 
 ## Suggested Product Goals
 
@@ -90,7 +90,7 @@ This app should aim to be:
 4. User receives a rough meal plan and guidance
 5. User uploads meal photos daily
 6. Gemini processes the images and estimates food nutrients
-7. App stores meal history and nutritional data in Firebase
+7. App stores meal history and nutritional data in the app's future backend
 8. User exports a report for their doctor or nutritionist
 
 ## Potential Features to Build
@@ -112,7 +112,7 @@ This app is built with:
 
 - **Next.js** for the application frontend and app structure
 - **Gemini** for meal image analysis and nutrient estimation
-- **Firebase** for authentication, database, and storage
+- Backend services are not wired up yet; current flows should use local placeholders where needed
 
 ## Important Notes
 
