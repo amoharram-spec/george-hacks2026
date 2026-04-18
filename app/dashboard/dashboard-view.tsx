@@ -16,7 +16,36 @@ const statusToneMap: Record<Micronutrient["status"], string> = {
 };
 
 const quickActions = ["Upload Picture of meal", "View Plan", "Export Report"];
-const primaryMicronutrientLabels = new Set(["Vitamin D", "Vitamin B12", "Folate", "Vitamin C", "Vitamin A"]);
+const primaryMicronutrientLabels = new Set([
+  // --- Vitamins ---
+  "Vitamin A", "Vitamin C", "Vitamin D", "Vitamin E", "Vitamin K",
+  "Thiamine (B1)", "Riboflavin (B2)", "Niacin (B3)", "Pantothenic Acid (B5)",
+  "Vitamin B6", "Vitamin B12", "Folate", "Folic Acid", "Biotin", "Choline",
+
+  // --- Minerals ---
+  "Calcium", "Chromium", "Copper", "Fluoride", "Iodine", "Iron",
+  "Magnesium", "Manganese", "Molybdenum", "Phosphorus", "Potassium",
+  "Selenium", "Sodium", "Zinc", "Chloride",
+
+  // --- Amino Acids (Protein Detail) ---
+  "Cystine", "Histidine", "Isoleucine", "Leucine", "Lysine",
+  "Methionine", "Phenylalanine", "Threonine", "Tryptophan", "Tyrosine",
+  "Valine", "Alanine", "Arginine", "Aspartic Acid", "Glutamic Acid",
+  "Glycine", "Proline", "Serine", "Hydroxyproline",
+
+  // --- Lipids (Fats & Cholesterol) ---
+  "Saturated", "Monounsaturated", "Polyunsaturated",
+  "Omega-3", "Omega-6", "Trans-Fat", "Cholesterol",
+  "Phytosterol", "Alpha-Linolenic Acid (ALA)", "Eicosapentaenoic Acid (EPA)",
+  "Docosahexaenoic Acid (DHA)", "Linoleic Acid",
+
+  // --- Carbohydrates & Fiber ---
+  "Fiber", "Soluble Fiber", "Insoluble Fiber", "Sugar", "Starch",
+  "Net Carbs", "Added Sugar", "Sugar Alcohol",
+
+  // --- Others ---
+  "Water", "Alcohol", "Caffeine", "Theobromine", "Ash", "Lycopene", "Lutein + Zeaxanthin"
+]);
 const smoothExpandTransition = {
   duration: 0.36,
   ease: [0.22, 1, 0.36, 1] as const,
