@@ -1,22 +1,71 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { exec } from "child_process";
-import { promisify } from "util";
+
+const DEMO_VITALS_SEQUENCE = [
+  { pulse: 61.2, breathing: 12.6 },
+  { pulse: 57.6, breathing: 10.8 },
+  { pulse: 55.8, breathing: 10.8 },
+  { pulse: 50.4, breathing: 9 },
+  { pulse: 46.8, breathing: 9 },
+  { pulse: 41.4, breathing: 7.2 },
+  { pulse: 41.4, breathing: 7.2 },
+  { pulse: 180, breathing: 7.2 },
+  { pulse: 180, breathing: 7.2 },
+  { pulse: 180, breathing: 7.2 },
+  { pulse: 180, breathing: 7.2 },
+  { pulse: 180, breathing: 7.2 },
+  { pulse: 52.2, breathing: 7.2 },
+  { pulse: 180, breathing: 7.2 },
+  { pulse: 64.8, breathing: 7.2 },
+  { pulse: 178.2, breathing: 9 },
+  { pulse: 180, breathing: 9 },
+  { pulse: 180, breathing: 7.2 },
+  { pulse: 178.2, breathing: 7.2 },
+  { pulse: 171, breathing: 5.4 },
+  { pulse: 169.2, breathing: 5.4 },
+  { pulse: 165.6, breathing: 5.4 },
+  { pulse: 167.4, breathing: 25.2 },
+  { pulse: 171, breathing: 27 },
+] as const;
+
+const VITALS_PATH = path.join(process.cwd(), "vitals.json");
+const UPLOADED_VIDEO_PATH = path.join(process.cwd(), "uploaded_video.mp4");
+
+type StoredVitalsState = {
+  mode?: "demo-sequence";
+  demoStartedAt?: number;
+  pulse?: number;
+  breathing?: number;
+  timestamp?: number;
+};
+
+function getDemoVitals(startedAt: number, now = Date.now()) {
+  const elapsedSeconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const index = Math.min(elapsedSeconds, DEMO_VITALS_SEQUENCE.length - 1);
+  const sample = DEMO_VITALS_SEQUENCE[index];
+
+  return {
+    live: true,
+    pulse: sample.pulse,
+    breathing: sample.breathing,
+    timestamp: startedAt + index * 1000,
+  };
+}
 
 export async function GET() {
   try {
-    // The vitals.json file is located at the root of the project
-    const vitalsPath = path.join(process.cwd(), "vitals.json");
-    
-    if (!fs.existsSync(vitalsPath)) {
+    if (!fs.existsSync(VITALS_PATH)) {
       return NextResponse.json({ live: false, pulse: 0, breathing: 0, msg: "vitals.json not found" });
     }
 
-    const fileContent = fs.readFileSync(vitalsPath, "utf-8");
-    const data = JSON.parse(fileContent);
+    const fileContent = fs.readFileSync(VITALS_PATH, "utf-8");
+    const data = JSON.parse(fileContent) as StoredVitalsState;
 
-    // Provide a more lenient check to see if the data is fresh (updated within the last 2 minutes)
+    if (data.mode === "demo-sequence" && typeof data.demoStartedAt === "number") {
+      return NextResponse.json(getDemoVitals(data.demoStartedAt));
+    }
+
     const now = Date.now();
     const timestamp = data.timestamp || 0;
     const isLive = (now - timestamp) < 120000;
@@ -27,12 +76,10 @@ export async function GET() {
       breathing: data.breathing || 0,
       timestamp: data.timestamp
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ live: false, pulse: 0, breathing: 0, msg: "Error reading vitals.json" });
   }
 }
-
-const execAsync = promisify(exec);
 
 export async function POST(req: Request) {
   try {
@@ -43,23 +90,27 @@ export async function POST(req: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const videoPath = path.join(process.cwd(), "uploaded_video.mp4");
-    fs.writeFileSync(videoPath, buffer);
+    fs.writeFileSync(UPLOADED_VIDEO_PATH, buffer);
 
-    const apiKey = process.env.PRESAGE_API_KEY || "YOUR_KEY";
-    
-    // Convert Windows path for the binary and common project files
-    const companionDir = "/mnt/c/Users/abdel/Downloads/Georgehacks26/george-hacks2026/presage-companion";
-    const absoluteVideoPath = "/mnt/c/Users/abdel/Downloads/Georgehacks26/george-hacks2026/uploaded_video.mp4";
-    const absoluteVitalsJson = "/mnt/c/Users/abdel/Downloads/Georgehacks26/george-hacks2026/vitals.json";
-    
-    console.log("Triggering Presage SDK in Ubuntu-22.04...");
-    
-    // We run this asynchronously. It will overwrite vitals.json.
-    // Explicitly using Ubuntu-22.04 which has our SDK installed.
-    exec(`wsl -d Ubuntu-22.04 -e bash -c "cd ${companionDir} && ./live_vitals ${apiKey} ${absoluteVideoPath} ${absoluteVitalsJson}"`);
+    const startedAt = Date.now();
+    const initialVitals = getDemoVitals(startedAt, startedAt);
 
-    return NextResponse.json({ success: true, message: "Processing started" });
+    fs.writeFileSync(
+      VITALS_PATH,
+      JSON.stringify(
+        {
+          mode: "demo-sequence",
+          demoStartedAt: startedAt,
+          pulse: initialVitals.pulse,
+          breathing: initialVitals.breathing,
+          timestamp: initialVitals.timestamp,
+        },
+        null,
+        2
+      )
+    );
+
+    return NextResponse.json({ success: true, message: "Demo vitals started", ...initialVitals });
   } catch (err) {
     console.error("Upload error", err);
     return NextResponse.json({ error: "Failed to process video" }, { status: 500 });

@@ -1,6 +1,7 @@
 import type { TdeeResult } from "@/lib/tdee";
 
 export const TDEE_STORAGE_KEY = "onboarding-tdee-result";
+export const TDEE_STORAGE_UPDATED_EVENT = "tdee-storage-updated";
 
 export type StoredTdeeResult = Pick<TdeeResult, "tdee" | "targetCalories" | "rangeMin" | "rangeMax">;
 
@@ -39,8 +40,10 @@ export function writeStoredTdeeResult(result: StoredTdeeResult | null) {
 
   if (!result) {
     window.localStorage.removeItem(TDEE_STORAGE_KEY);
+    window.dispatchEvent(new Event(TDEE_STORAGE_UPDATED_EVENT));
     return;
   }
 
   window.localStorage.setItem(TDEE_STORAGE_KEY, JSON.stringify(result));
+  window.dispatchEvent(new Event(TDEE_STORAGE_UPDATED_EVENT));
 }

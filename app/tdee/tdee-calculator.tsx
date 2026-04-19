@@ -14,6 +14,7 @@ import {
   type Sex,
   type TdeeResult,
 } from "@/lib/tdee";
+import { writeStoredTdeeResult } from "@/lib/tdee-storage";
 
 type UnitSystem = "metric" | "imperial";
 
@@ -131,6 +132,23 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
     if (!onResultChange) return;
     onResultChange(result);
   }, [onResultChange, result]);
+
+  useEffect(() => {
+    if (variant !== "page") {
+      return;
+    }
+
+    writeStoredTdeeResult(
+      result
+        ? {
+            tdee: result.tdee,
+            targetCalories: result.targetCalories,
+            rangeMin: result.rangeMin,
+            rangeMax: result.rangeMax,
+          }
+        : null,
+    );
+  }, [result, variant]);
 
   return (
     <div className={embedded ? "w-full" : "mx-auto w-full max-w-lg"}>
