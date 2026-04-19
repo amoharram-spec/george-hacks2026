@@ -1,9 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useState, type ChangeEvent, type FormEvent } from "react";
 
-type OnboardingStep = "name" | "body" | "labs";
+import { TdeeCalculator } from "../tdee/tdee-calculator";
+
+type OnboardingStep = "name" | "tdee" | "labs";
 
 type ParsedLab = {
   key: string;
@@ -38,21 +40,20 @@ function formatLabValue(lab: ParsedLab) {
 
 const stepTitles: Record<OnboardingStep, string> = {
   name: "Let’s start with your name",
-  body: "Now tell us your body metrics",
+  tdee: "Daily calories & energy needs",
   labs: "Upload your lab results",
 };
 
 const stepDescriptions: Record<OnboardingStep, string> = {
   name: "We’ll use this to personalize your nutrition plan and keep the flow feeling human.",
-  body: "Use metric units so the app can align your plan with your health data cleanly.",
+  tdee: "Height, weight, age, activity, and goal power a TDEE estimate so targets line up with your plan.",
   labs: "Add your latest PDF report so we can extract markers and connect them to your plan.",
 };
 
 export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("name");
   const [name, setName] = useState("");
-  const [heightCm, setHeightCm] = useState("");
-  const [weightKg, setWeightKg] = useState("");
+  const [bodyMetrics, setBodyMetrics] = useState<{ weightKg: number; heightCm: number } | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -60,13 +61,15 @@ export default function OnboardingPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [report, setReport] = useState<LabReportResponse | null>(null);
 
-  const stepIndex = { name: 1, body: 2, labs: 3 } as const;
+  const stepIndex = { name: 1, tdee: 2, labs: 3 } as const;
 
   const canContinueName = name.trim().length > 0;
-  const heightValue = Number(heightCm);
-  const weightValue = Number(weightKg);
-  const canContinueBody = Number.isFinite(heightValue) && heightValue > 0 && Number.isFinite(weightValue) && weightValue > 0;
-  const canSubmitLabs = canContinueName && canContinueBody && Boolean(file);
+  const canContinueTdee = bodyMetrics !== null;
+  const canSubmitLabs = canContinueName && canContinueTdee && Boolean(file);
+
+  const handleTdeeMetrics = useCallback((metrics: { weightKg: number; heightCm: number } | null) => {
+    setBodyMetrics(metrics);
+  }, []);
 
   const resetCurrentError = () => {
     if (error) setError("");
@@ -100,13 +103,13 @@ export default function OnboardingPage() {
       }
 
       setError("");
-      setCurrentStep("body");
+      setCurrentStep("tdee");
       return;
     }
 
-    if (currentStep === "body") {
-      if (!canContinueBody) {
-        setError("Enter a valid height in cm and body weight in kg.");
+    if (currentStep === "tdee") {
+      if (!canContinueTdee) {
+        setError("Complete the calculator with valid height, weight, and age so we can continue.");
         return;
       }
 
@@ -123,12 +126,12 @@ export default function OnboardingPage() {
       return;
     }
 
-    if (currentStep === "body") {
+    if (currentStep === "tdee") {
       goToNextStep();
       return;
     }
 
-    if (!canSubmitLabs || !file) {
+    if (!canSubmitLabs || !file || !bodyMetrics) {
       setError("Please complete the earlier steps and choose a PDF file.");
       return;
     }
@@ -139,8 +142,8 @@ export default function OnboardingPage() {
 
     const formData = new FormData();
     formData.append("name", name.trim());
-    formData.append("heightCm", heightCm.trim());
-    formData.append("weightKg", weightKg.trim());
+    formData.append("heightCm", String(bodyMetrics.heightCm));
+    formData.append("weightKg", String(bodyMetrics.weightKg));
     formData.append("file", file);
 
     try {
@@ -232,53 +235,17 @@ export default function OnboardingPage() {
       );
     }
 
-    if (currentStep === "body") {
+    if (currentStep === "tdee") {
       return (
         <motion.div
-          key="body"
+          key="tdee"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -12 }}
           transition={{ duration: 0.28, ease: "easeOut" }}
-          className="grid gap-4 sm:grid-cols-2"
+          className="space-y-4"
         >
-          <div>
-            <label htmlFor="heightCm" className="mb-2 block text-sm font-medium text-gray-900">
-              Height (cm)
-            </label>
-            <input
-              id="heightCm"
-              type="number"
-              min="1"
-              step="0.1"
-              value={heightCm}
-              onChange={(e) => {
-                setHeightCm(e.target.value);
-                resetCurrentError();
-              }}
-              placeholder="e.g. 178"
-              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/10"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="weightKg" className="mb-2 block text-sm font-medium text-gray-900">
-              Body Weight (kg)
-            </label>
-            <input
-              id="weightKg"
-              type="number"
-              min="1"
-              step="0.1"
-              value={weightKg}
-              onChange={(e) => {
-                setWeightKg(e.target.value);
-                resetCurrentError();
-              }}
-              placeholder="e.g. 72"
-              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/10"
-            />
-          </div>
+          <TdeeCalculator variant="embedded" onMetricsChange={handleTdeeMetrics} />
         </motion.div>
       );
     }
@@ -329,7 +296,7 @@ export default function OnboardingPage() {
           </div>
 
           <div className="mb-6 grid grid-cols-3 gap-2">
-            {(["name", "body", "labs"] as OnboardingStep[]).map((step) => (
+            {(["name", "tdee", "labs"] as OnboardingStep[]).map((step) => (
               <div
                 key={step}
                 className={`h-1.5 rounded-full transition-colors ${stepIndex[step] <= stepIndex[currentStep] ? "bg-black" : "bg-gray-200"}`}
@@ -350,7 +317,7 @@ export default function OnboardingPage() {
                   type="button"
                   onClick={() => {
                     setError("");
-                    setCurrentStep(currentStep === "body" ? "name" : "body");
+                    setCurrentStep(currentStep === "labs" ? "tdee" : "name");
                   }}
                   className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
                 >
@@ -360,12 +327,18 @@ export default function OnboardingPage() {
 
               <button
                 type="submit"
-                disabled={currentStep === "name" ? !canContinueName : currentStep === "body" ? !canContinueBody : !canSubmitLabs || isUploading}
+                disabled={
+                  currentStep === "name"
+                    ? !canContinueName
+                    : currentStep === "tdee"
+                      ? !canContinueTdee
+                      : !canSubmitLabs || isUploading
+                }
                 className="flex-1 rounded-xl bg-black py-3 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {currentStep === "name"
                   ? "Continue"
-                  : currentStep === "body"
+                  : currentStep === "tdee"
                     ? "Continue"
                     : isUploading
                       ? "Uploading and extracting..."
