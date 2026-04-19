@@ -1262,7 +1262,7 @@ export function DashboardView({ data }: DashboardViewProps) {
               <p className="mt-3 text-sm leading-6 text-zinc-600">{recommendationLoadingDetail}</p>
               <div className="mt-4 h-2.5 rounded-full bg-white/90">
                 <div
-                  className="h-2.5 rounded-full bg-emerald-500 transition-all duration-500 ease-out"
+                  className="h-2.5 rounded-full bg-zinc-950 transition-all duration-500 ease-out"
                   style={{ width: `${Math.max(recommendationProgress, 6)}%` }}
                 />
               </div>
