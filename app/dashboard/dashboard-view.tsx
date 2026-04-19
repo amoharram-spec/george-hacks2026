@@ -43,8 +43,8 @@ const primaryMicronutrientLabels = new Set([
   "Fiber", "Soluble Fiber", "Insoluble Fiber", "Sugar", "Starch",
   "Net Carbs", "Added Sugar", "Sugar Alcohol",
 
-  // --- Others ---
-  "Water", "Alcohol", "Caffeine", "Theobromine", "Ash", "Lycopene", "Lutein + Zeaxanthin"
+  // --- Others --- 
+  "Alcohol", "Caffeine", "Theobromine", "Ash", "Lycopene", "Lutein + Zeaxanthin"
 ]);
 const smoothExpandTransition = {
   duration: 0.36,
@@ -275,6 +275,97 @@ function MealCard({ meal }: { meal: Meal }) {
   );
 }
 
+function LiveVitalsCard() {
+  const [vitals, setVitals] = useState({ live: false, pulse: 0, breathing: 0 });
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const fetchVitals = async () => {
+      try {
+        const res = await fetch("/api/vitals", { cache: "no-store", headers: { 'Cache-Control': 'no-cache' } });
+        if (res.ok) {
+          const data = await res.json();
+          setVitals(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch vitals", err);
+        setVitals(prev => ({ ...prev, live: false }));
+      }
+    };
+
+    // Initial fetch
+    fetchVitals();
+    // Poll every second
+    const interval = setInterval(fetchVitals, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("video", file);
+
+    try {
+      await fetch("/api/vitals", { method: "POST", body: formData });
+      // The backend now started WSL processing, UI will update via polling 
+      // once vitals.json is successfully overwritten with new data!
+      setTimeout(() => setUploading(false), 2000);
+    } catch (err) {
+      console.error("Upload failed", err);
+      setUploading(false);
+    }
+  };
+
+  return (
+    <article className="rounded-[1.9rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400 flex items-center gap-2">
+          Presage Vitals
+        </p>
+        <span className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${uploading ? 'bg-amber-100 text-amber-700' : vitals.live ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${uploading ? 'bg-amber-500 animate-bounce' : vitals.live ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-400'}`}></span>
+          {uploading ? 'PROCESSING...' : vitals.live ? 'LIVE SENSOR' : 'OFFLINE'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="bg-zinc-50 rounded-2xl p-4 flex flex-col items-center justify-center relative overflow-hidden">
+          {vitals.live && <div className="absolute inset-0 bg-red-50 opacity-50 animate-[pulse_1s_ease-in-out_infinite]" style={{ animationDuration: `${60 / (vitals.pulse || 60)}s` }}></div>}
+          <div className="text-3xl font-semibold text-zinc-950 relative z-10">{vitals.pulse > 0 ? Math.round(vitals.pulse) : "--"}</div>
+          <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mt-1 relative z-10">BPM</div>
+        </div>
+
+        <div className="bg-zinc-50 rounded-2xl p-4 flex flex-col items-center justify-center relative overflow-hidden">
+          {vitals.live && <div className="absolute inset-0 bg-blue-50 opacity-50 animate-[pulse_3s_ease-in-out_infinite]" style={{ animationDuration: `${60 / (vitals.breathing || 15)}s` }}></div>}
+          <div className="text-3xl font-semibold text-zinc-950 relative z-10">{vitals.breathing > 0 ? Math.round(vitals.breathing) : "--"}</div>
+          <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-widest mt-1 relative z-10">Resp Rate</div>
+        </div>
+      </div>
+
+      <input 
+        type="file" 
+        accept="video/mp4,video/webm,video/quicktime" 
+        className="hidden" 
+        ref={fileInputRef} 
+        onChange={handleFileUpload} 
+        disabled={uploading}
+      />
+      <button 
+        type="button" 
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploading}
+        className="w-full rounded-xl bg-zinc-950 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-50 transition"
+      >
+        {uploading ? 'Processing Video...' : 'Upload Face Video (.mp4)'}
+      </button>
+    </article>
+  );
+}
+
 export function DashboardView({ data }: DashboardViewProps) {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [activeScrollArea, setActiveScrollArea] = useState<"left" | "right" | "meals" | null>(null);
@@ -338,16 +429,15 @@ export function DashboardView({ data }: DashboardViewProps) {
 
   return (
     <main className="min-h-screen bg-[#e8e6e1] px-4 py-4 sm:px-6 lg:h-screen lg:overflow-hidden lg:px-8 lg:py-6">
-      <div className="mx-auto flex h-full w-full max-w-[1500px] flex-col gap-5 lg:grid lg:grid-cols-[520px_minmax(0,1fr)] lg:gap-6">
+      <div className="mx-auto flex h-full w-full max-w-[1500px] flex-col gap-5 lg:grid lg:grid-cols-[340px_minmax(0,1fr)_340px] lg:gap-6">
+        {/* Left sidebar — calories & macros */}
         <section
           ref={leftSidebarRef}
           className={`scrollbar-fade flex flex-col gap-5 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto lg:pr-2 ${activeScrollArea === "left" ? "scrollbar-fade-active" : ""}`}
         >
-          <div className="grid gap-4 sm:grid-cols-[0.8fr_1.2fr]">
-            <CaloriesCard metric={calories} />
-            <MacroWaterCard macros={data.macroRings} water={water} />
-          </div>
-
+          <LiveVitalsCard />
+          <CaloriesCard metric={calories} />
+          <MacroWaterCard macros={data.macroRings} water={water} />
           <MicronutrientsCard micronutrients={data.micronutrients} />
         </section>
 
