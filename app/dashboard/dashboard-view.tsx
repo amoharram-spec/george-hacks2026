@@ -2,11 +2,11 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 import { readStoredTdeeResult, TDEE_STORAGE_UPDATED_EVENT } from "@/lib/tdee-storage";
 
-import type { DashboardData, DailyMetric, Meal, Micronutrient } from "./types";
+import type { DashboardData, DailyMetric, Meal, Micronutrient, Recommendation } from "./types";
 
 type DashboardViewProps = {
   data: DashboardData;
@@ -44,15 +44,32 @@ type LiveVitals = {
   live: boolean;
   pulse: number;
   breathing: number;
+  timestamp: number | null;
+  sessionId: number | null;
+  currentIndex: number;
+  sequenceLength: number;
+  progressPercent: number;
+  isComplete: boolean;
+  status: "idle" | "reading" | "complete";
+  samples: Array<{
+    pulse: number;
+    breathing: number;
+    timestamp: number;
+  }>;
+  averages: {
+    pulse: number;
+    breathing: number;
+  } | null;
 };
 
-const primaryMicronutrientLabels = new Set([
-  "Vitamin A", "Vitamin C", "Vitamin D", "Vitamin E", "Vitamin K",
-  "Thiamine (B1)", "Riboflavin (B2)", "Niacin (B3)", "Pantothenic Acid (B5)",
-  "Vitamin B6", "Vitamin B12", "Folate", "Choline",
-  "Calcium", "Copper", "Iron", "Magnesium", "Manganese", "Phosphorus",
-  "Potassium", "Selenium", "Sodium", "Zinc",
-]);
+type VitalsRecommendationState = "idle" | "reading" | "analyzing" | "ready" | "error";
+
+type VitalsRecommendationResponse = {
+  recommendation?: Recommendation;
+  error?: string;
+};
+
+const DEFAULT_VISIBLE_MICRONUTRIENTS = 6;
 
 const statusToneMap: Record<Micronutrient["status"], string> = {
   low: "bg-rose-100 text-rose-700",
@@ -87,6 +104,58 @@ function formatConfidence(confidence: number | null) {
   }
 
   return `${Math.round(confidence * 100)}%`;
+}
+
+function getEmptyLiveVitals(): LiveVitals {
+  return {
+    live: false,
+    pulse: 0,
+    breathing: 0,
+    timestamp: null,
+    sessionId: null,
+    currentIndex: 0,
+    sequenceLength: 0,
+    progressPercent: 0,
+    isComplete: false,
+    status: "idle",
+    samples: [],
+    averages: null,
+  };
+}
+
+function normalizeVitalsPayload(input: unknown): LiveVitals {
+  if (!input || typeof input !== "object") {
+    return getEmptyLiveVitals();
+  }
+
+  const candidate = input as Partial<LiveVitals>;
+
+  return {
+    live: Boolean(candidate.live),
+    pulse: typeof candidate.pulse === "number" ? candidate.pulse : 0,
+    breathing: typeof candidate.breathing === "number" ? candidate.breathing : 0,
+    timestamp: typeof candidate.timestamp === "number" ? candidate.timestamp : null,
+    sessionId: typeof candidate.sessionId === "number" ? candidate.sessionId : null,
+    currentIndex: typeof candidate.currentIndex === "number" ? candidate.currentIndex : 0,
+    sequenceLength: typeof candidate.sequenceLength === "number" ? candidate.sequenceLength : 0,
+    progressPercent: typeof candidate.progressPercent === "number" ? candidate.progressPercent : 0,
+    isComplete: Boolean(candidate.isComplete),
+    status: candidate.status === "reading" || candidate.status === "complete" ? candidate.status : "idle",
+    samples: Array.isArray(candidate.samples)
+      ? candidate.samples.filter(
+          (sample): sample is LiveVitals["samples"][number] =>
+            Boolean(sample)
+            && typeof sample.pulse === "number"
+            && typeof sample.breathing === "number"
+            && typeof sample.timestamp === "number",
+        )
+      : [],
+    averages: candidate.averages
+      && typeof candidate.averages.pulse === "number"
+      && typeof candidate.averages.breathing === "number"
+      ? candidate.averages
+      : null,
+  };
 }
 
 function formatInsightForCopy(insight: AIInsight) {
@@ -192,55 +261,6 @@ function normalizeInsight(input: unknown): AIInsight | null {
   };
 }
 
-function getVitalsDrivenRecommendation(baseRecommendation: DashboardData["recommendation"], vitals: LiveVitals) {
-  const pulse = Math.round(vitals.pulse);
-  const breathing = Math.round(vitals.breathing);
-
-  if (pulse >= 120 || breathing >= 22) {
-    return {
-      ...baseRecommendation,
-      title: "Eat a recovery bowl with salmon, rice, avocado, and spinach next",
-      summary: `Your uploaded vitals read elevated at ${pulse} BPM and ${breathing} breaths/min, so the next meal should favor hydration support, potassium, magnesium, and steady carbs.`,
-      alignment: "This shifts the recommendation toward calmer recovery fuel instead of a heavier, saltier meal while your system is under more strain.",
-      nextMeal: "Pair water or an electrolyte drink with a salmon bowl that includes rice, avocado, spinach, cucumber, and pumpkin seeds.",
-      reasons: [
-        `Pulse is running high at ${pulse} BPM, so a balanced meal with fluids and mineral-dense produce is a better fit than something greasy or highly processed.`,
-        `Breathing rate is elevated at ${breathing} breaths/min, which makes easy-to-digest carbs and hydration a safer next step for recovery.`,
-        "Salmon, avocado, spinach, and pumpkin seeds reinforce potassium, magnesium, and omega-3 intake in one meal.",
-      ],
-    };
-  }
-
-  if (pulse <= 52 || breathing <= 9) {
-    return {
-      ...baseRecommendation,
-      title: "Eat a steady-energy meal with oats, Greek yogurt, berries, and chia next",
-      summary: `Your uploaded vitals are reading lower at ${pulse} BPM and ${breathing} breaths/min, so the next meal should be light, consistent, and nutrient-dense rather than overly heavy.`,
-      alignment: "This keeps the recommendation gentle and restorative while still improving protein, fiber, and micronutrient coverage.",
-      nextMeal: "Build a bowl with oats, Greek yogurt, berries, chia seeds, walnuts, and a banana for steady carbohydrates and minerals.",
-      reasons: [
-        `A lower pulse at ${pulse} BPM points to a steadier fueling approach instead of a large calorie spike in one sitting.`,
-        `Breathing is currently ${breathing} breaths/min, so a lighter meal with easy digestion fits the current vital pattern better.`,
-        "Oats, chia, berries, and banana add fiber, potassium, and magnesium while Greek yogurt helps hold protein intake on track.",
-      ],
-    };
-  }
-
-  return {
-    ...baseRecommendation,
-    title: "Eat grilled chicken, quinoa, and roasted vegetables next",
-    summary: `Your uploaded vitals are stable at ${pulse} BPM and ${breathing} breaths/min, so the next meal can stay balanced around protein, complex carbs, and micronutrient coverage.`,
-    alignment: "This keeps the recommendation anchored to your baseline nutrition plan while still acknowledging the current vital snapshot.",
-    nextMeal: "Go with grilled chicken, quinoa, broccoli, roasted peppers, and olive oil, then add fruit on the side if you still need carbs.",
-    reasons: [
-      `Pulse at ${pulse} BPM and breathing at ${breathing} breaths/min suggest you do not need an aggressive recovery adjustment right now.`,
-      "A balanced plate keeps protein progress moving without giving up potassium, magnesium, and fiber opportunities.",
-      "Roasted vegetables and quinoa keep the meal aligned with micronutrient support instead of calories alone.",
-    ],
-  };
-}
-
-
 function CaloriesCard({ metric }: { metric: DailyMetric }) {
   const progress = getPercent(metric.consumed, metric.target);
 
@@ -339,24 +359,31 @@ function MicronutrientRow({ nutrient }: { nutrient: Micronutrient }) {
 function MicronutrientsCard({ micronutrients }: { micronutrients: Micronutrient[] }) {
   const [expanded, setExpanded] = useState(false);
 
-  const primaryNutrients = micronutrients.filter((nutrient) => primaryMicronutrientLabels.has(nutrient.label));
-  const additionalNutrients = micronutrients.filter((nutrient) => !primaryMicronutrientLabels.has(nutrient.label));
+  const primaryNutrients = micronutrients.slice(0, DEFAULT_VISIBLE_MICRONUTRIENTS);
+  const additionalNutrients = micronutrients.slice(DEFAULT_VISIBLE_MICRONUTRIENTS);
+  const hasAdditionalNutrients = additionalNutrients.length > 0;
 
   return (
     <article className="rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
       <button
         type="button"
-        onClick={() => setExpanded((current) => !current)}
-        aria-expanded={expanded}
+        onClick={() => {
+          if (hasAdditionalNutrients) {
+            setExpanded((current) => !current);
+          }
+        }}
+        aria-expanded={hasAdditionalNutrients ? expanded : undefined}
         className="flex w-full items-start justify-between gap-4 text-left"
       >
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Micronutrients</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">Vitamins and minerals</h2>
         </div>
-        <span className="shrink-0 rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-600">
-          {expanded ? "Show less" : "Show all"}
-        </span>
+        {hasAdditionalNutrients ? (
+          <span className="shrink-0 rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-600">
+            {expanded ? "Show less" : "Show all"}
+          </span>
+        ) : null}
       </button>
 
       <div className="mt-6 grid gap-4">
@@ -366,7 +393,7 @@ function MicronutrientsCard({ micronutrients }: { micronutrients: Micronutrient[
       </div>
 
       <AnimatePresence initial={false}>
-        {expanded ? (
+        {expanded && hasAdditionalNutrients ? (
           <motion.div
             key="additional-micronutrients"
             initial={{ height: 0, opacity: 0 }}
@@ -512,7 +539,7 @@ function LiveVitalsCard({
   onVitalsChange?: (vitals: LiveVitals) => void;
   onVitalsUpload?: (vitals: LiveVitals) => void;
 }) {
-  const [vitals, setVitals] = useState<LiveVitals>({ live: false, pulse: 0, breathing: 0 });
+  const [vitals, setVitals] = useState<LiveVitals>(getEmptyLiveVitals);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -530,12 +557,8 @@ function LiveVitalsCard({
       try {
         const res = await fetch("/api/vitals", { cache: "no-store", headers: { "Cache-Control": "no-cache" } });
         if (res.ok) {
-          const data = await res.json();
-          const nextVitals: LiveVitals = {
-            live: Boolean(data.live),
-            pulse: typeof data.pulse === "number" ? data.pulse : 0,
-            breathing: typeof data.breathing === "number" ? data.breathing : 0,
-          };
+          const data = normalizeVitalsPayload(await res.json());
+          const nextVitals: LiveVitals = data;
 
           setVitals(nextVitals);
           onVitalsChange?.(nextVitals);
@@ -543,7 +566,11 @@ function LiveVitalsCard({
       } catch (err) {
         console.error("Failed to fetch vitals", err);
         setVitals((prev) => {
-          const nextVitals = { ...prev, live: false };
+          const nextVitals: LiveVitals = {
+            ...prev,
+            live: false,
+            status: prev.isComplete ? "complete" : "idle",
+          };
           onVitalsChange?.(nextVitals);
           return nextVitals;
         });
@@ -574,12 +601,9 @@ function LiveVitalsCard({
         throw new Error(typeof data?.error === "string" ? data.error : "Upload failed");
       }
 
-      if (typeof data?.pulse === "number" && typeof data?.breathing === "number") {
-        const nextVitals: LiveVitals = {
-          live: Boolean(data.live),
-          pulse: data.pulse,
-          breathing: data.breathing,
-        };
+      const nextVitals = normalizeVitalsPayload(data);
+
+      if (nextVitals.sequenceLength > 0) {
 
         setVitals(nextVitals);
         onVitalsChange?.(nextVitals);
@@ -829,8 +853,11 @@ function InsightReportModal({
 
 export function DashboardView({ data }: DashboardViewProps) {
   const [uploadedDashboardData, setUploadedDashboardData] = useState<DashboardData | null>(null);
-  const [latestVitals, setLatestVitals] = useState<LiveVitals>({ live: false, pulse: 0, breathing: 0 });
-  const [vitalsRecommendationEnabled, setVitalsRecommendationEnabled] = useState(false);
+  const [latestVitals, setLatestVitals] = useState<LiveVitals>(getEmptyLiveVitals);
+  const [activeVitalsSessionId, setActiveVitalsSessionId] = useState<number | null>(null);
+  const [vitalsRecommendationState, setVitalsRecommendationState] = useState<VitalsRecommendationState>("idle");
+  const [vitalsRecommendation, setVitalsRecommendation] = useState<Recommendation | null>(null);
+  const [vitalsRecommendationError, setVitalsRecommendationError] = useState("");
   const [actionsOpen, setActionsOpen] = useState(false);
   const [mealUploading, setMealUploading] = useState(false);
   const [mealUploadError, setMealUploadError] = useState("");
@@ -839,12 +866,14 @@ export function DashboardView({ data }: DashboardViewProps) {
   const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [hasLoadedInsight, setHasLoadedInsight] = useState(false);
-  const [activeScrollArea, setActiveScrollArea] = useState<"left" | "right" | "meals" | null>(null);
+  const [activeScrollArea, setActiveScrollArea] = useState<"left" | "right" | "meals" | "sidebar" | null>(null);
   const [calorieTargetOverride, setCalorieTargetOverride] = useState<number | null>(() => readStoredTdeeResult()?.targetCalories ?? null);
   const leftSidebarRef = useRef<HTMLElement | null>(null);
   const rightColumnRef = useRef<HTMLElement | null>(null);
+  const rightSidebarRef = useRef<HTMLElement | null>(null);
   const mealsListRef = useRef<HTMLDivElement | null>(null);
   const mealFileInputRef = useRef<HTMLInputElement>(null);
+  const analyzedVitalsSessionRef = useRef<number | null>(null);
 
   const dashboardData = useMemo<DashboardData>(() => {
     const baseData = uploadedDashboardData ?? data;
@@ -867,17 +896,90 @@ export function DashboardView({ data }: DashboardViewProps) {
   const calories = dashboardData.dailySummary.find((metric) => metric.label === "Calories");
   const water = dashboardData.supportMetrics.find((metric) => metric.label === "Water");
   const recommendation = useMemo(() => {
-    if (!vitalsRecommendationEnabled || latestVitals.pulse <= 0 || latestVitals.breathing <= 0) {
+    if (!vitalsRecommendation) {
       return dashboardData.recommendation;
     }
 
-    return getVitalsDrivenRecommendation(dashboardData.recommendation, latestVitals);
-  }, [dashboardData.recommendation, latestVitals, vitalsRecommendationEnabled]);
+    return vitalsRecommendation;
+  }, [dashboardData.recommendation, vitalsRecommendation]);
+
+  const requestVitalsRecommendation = useCallback(async (vitals: LiveVitals) => {
+    if (
+      vitals.sessionId === null
+      || !vitals.isComplete
+      || vitals.samples.length === 0
+      || analyzedVitalsSessionRef.current === vitals.sessionId
+    ) {
+      return;
+    }
+
+    analyzedVitalsSessionRef.current = vitals.sessionId;
+    setVitalsRecommendationState("analyzing");
+    setVitalsRecommendationError("");
+
+    try {
+      const response = await fetch("/api/vitals/recommendation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          samples: vitals.samples,
+          averages: vitals.averages,
+        }),
+      });
+
+      const payload = (await response.json()) as VitalsRecommendationResponse;
+
+      if (!response.ok || !payload.recommendation) {
+        throw new Error(payload.error ?? "Failed to generate recommendation from vitals.");
+      }
+
+      setVitalsRecommendation(payload.recommendation);
+      setVitalsRecommendationState("ready");
+    } catch (error) {
+      analyzedVitalsSessionRef.current = null;
+      setVitalsRecommendationState("error");
+      setVitalsRecommendationError(error instanceof Error ? error.message : "Failed to generate recommendation from vitals.");
+    }
+  }, []);
+
+  const handleVitalsChange = useCallback((vitals: LiveVitals) => {
+    setLatestVitals(vitals);
+
+    if (vitals.sessionId !== null && activeVitalsSessionId === null) {
+      setActiveVitalsSessionId(vitals.sessionId);
+    }
+
+    if (vitals.isComplete) {
+      void requestVitalsRecommendation(vitals);
+      return;
+    }
+
+    if (vitals.status === "reading" && activeVitalsSessionId !== null && vitals.sessionId === activeVitalsSessionId) {
+      setVitalsRecommendationState("reading");
+    }
+  }, [activeVitalsSessionId, requestVitalsRecommendation]);
+
+  const handleVitalsUpload = useCallback((vitals: LiveVitals) => {
+    setLatestVitals(vitals);
+    setActiveVitalsSessionId(vitals.sessionId);
+    analyzedVitalsSessionRef.current = null;
+    setVitalsRecommendation(null);
+    setVitalsRecommendationError("");
+
+    if (vitals.isComplete) {
+      void requestVitalsRecommendation(vitals);
+      return;
+    }
+
+    setVitalsRecommendationState("reading");
+  }, [requestVitalsRecommendation]);
 
   useEffect(() => {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
-    const registerScrollFade = (key: "left" | "right" | "meals", node: HTMLElement | null) => {
+    const registerScrollFade = (key: "left" | "right" | "meals" | "sidebar", node: HTMLElement | null) => {
       if (!node) {
         return () => undefined;
       }
@@ -914,6 +1016,7 @@ export function DashboardView({ data }: DashboardViewProps) {
       registerScrollFade("left", leftSidebarRef.current),
       registerScrollFade("right", rightColumnRef.current),
       registerScrollFade("meals", mealsListRef.current),
+      registerScrollFade("sidebar", rightSidebarRef.current),
     ];
 
     return () => {
@@ -1052,9 +1155,19 @@ export function DashboardView({ data }: DashboardViewProps) {
   }
 
   const quickActions = [mealUploading ? "Scanning meal..." : "Upload Picture of meal", "View Plan", "Export Report"] as const;
+  const recommendationIsLoading = vitalsRecommendationState === "reading" || vitalsRecommendationState === "analyzing";
+  const recommendationUsesVitals = vitalsRecommendationState === "ready" && vitalsRecommendation !== null;
+  const recommendationProgress = vitalsRecommendationState === "reading"
+    ? latestVitals.progressPercent
+    : vitalsRecommendationState === "analyzing"
+      ? 100
+      : 0;
+  const recommendationLoadingDetail = vitalsRecommendationState === "analyzing"
+    ? "Averaging the full vitals session and generating your next meal with Gemini."
+    : `Captured ${latestVitals.currentIndex} of ${latestVitals.sequenceLength || 0} vitals readings from the uploaded video.`;
 
   return (
-    <main className="min-h-screen bg-[#e8e6e1] px-4 py-4 sm:px-6 lg:h-screen lg:overflow-hidden lg:px-8 lg:py-6">
+    <main className="min-h-screen bg-[#e8e6e1] px-4 pt-4 pb-6 sm:px-6 lg:flex lg:h-screen lg:flex-col lg:overflow-hidden lg:px-8 lg:pt-6 lg:pb-8">
       <div className="mx-auto mb-3 flex w-full max-w-[1500px] items-center justify-between gap-4">
         <p className="text-sm font-medium text-zinc-500">{dashboardData.dateLabel}</p>
         <Link
@@ -1064,17 +1177,14 @@ export function DashboardView({ data }: DashboardViewProps) {
           TDEE calculator
         </Link>
       </div>
-      <div className="mx-auto flex h-full w-full max-w-[1500px] flex-col gap-5 lg:grid lg:grid-cols-[340px_minmax(0,1fr)_340px] lg:gap-6">
+      <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5 lg:min-h-0 lg:flex-1 lg:grid lg:grid-cols-[340px_minmax(0,1fr)_340px] lg:gap-6">
         <section
           ref={leftSidebarRef}
-          className={`scrollbar-fade flex flex-col gap-5 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto lg:pr-2 ${activeScrollArea === "left" ? "scrollbar-fade-active" : ""}`}
+          className={`scrollbar-fade flex flex-col gap-5 lg:sticky lg:top-0 lg:max-h-full lg:self-start lg:overflow-y-auto lg:pr-2 ${activeScrollArea === "left" ? "scrollbar-fade-active" : ""}`}
         >
           <LiveVitalsCard
-            onVitalsChange={setLatestVitals}
-            onVitalsUpload={(vitals) => {
-              setLatestVitals(vitals);
-              setVitalsRecommendationEnabled(true);
-            }}
+            onVitalsChange={handleVitalsChange}
+            onVitalsUpload={handleVitalsUpload}
           />
           <CaloriesCard metric={calories} />
           <MacroWaterCard macros={dashboardData.macroRings} water={water} />
@@ -1083,7 +1193,7 @@ export function DashboardView({ data }: DashboardViewProps) {
 
         <section
           ref={rightColumnRef}
-          className={`scrollbar-fade flex min-h-0 flex-col lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-2 ${activeScrollArea === "right" ? "scrollbar-fade-active" : ""}`}
+          className={`scrollbar-fade flex min-h-0 flex-col lg:h-full lg:overflow-y-auto lg:pr-2 ${activeScrollArea === "right" ? "scrollbar-fade-active" : ""}`}
         >
           <section className="flex min-h-0 flex-1 flex-col rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:min-h-[720px]">
             <div className="flex items-end justify-between gap-4">
@@ -1115,41 +1225,85 @@ export function DashboardView({ data }: DashboardViewProps) {
           </section>
         </section>
 
-        <section className="rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
+        <section
+          ref={rightSidebarRef}
+          className={`scrollbar-fade rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:sticky lg:top-0 lg:max-h-full lg:self-start lg:overflow-y-auto lg:pr-3 ${activeScrollArea === "sidebar" ? "scrollbar-fade-active" : ""}`}
+        >
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Recommendation</p>
-              {vitalsRecommendationEnabled ? (
+              {recommendationUsesVitals ? (
                 <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600">Vitals-based meal active</p>
               ) : null}
             </div>
             <button
               type="button"
-              onClick={() => setVitalsRecommendationEnabled(false)}
-              disabled={!vitalsRecommendationEnabled}
+              onClick={() => {
+                setActiveVitalsSessionId(null);
+                setVitalsRecommendationState("idle");
+                setVitalsRecommendation(null);
+                setVitalsRecommendationError("");
+                analyzedVitalsSessionRef.current = null;
+              }}
+              disabled={!recommendationUsesVitals && !recommendationIsLoading && !vitalsRecommendationError}
               className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Reset
             </button>
           </div>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">{recommendation.title}</h2>
-          <p className="mt-4 text-sm leading-6 text-zinc-600">{recommendation.summary}</p>
-          <p className="mt-4 text-sm leading-6 text-zinc-600">{recommendation.alignment}</p>
-          <p className="mt-4 rounded-2xl bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-700">{recommendation.nextMeal}</p>
-          <div className="mt-4 space-y-3">
-            {recommendation.reasons.map((reason) => (
-              <div key={reason} className="rounded-2xl border border-zinc-100 px-4 py-3 text-sm text-zinc-600">
-                {reason}
+          {recommendationIsLoading ? (
+            <div className="mt-4 rounded-[1.6rem] border border-emerald-100 bg-emerald-50/70 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-lg font-semibold tracking-tight text-zinc-950">reading vitals</p>
+                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 shadow-sm">
+                  {recommendationProgress}%
+                </span>
               </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={handleOpenReport}
-            className="mt-5 w-full rounded-xl bg-zinc-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800"
-          >
-            {recommendation.ctaLabel}
-          </button>
+              <p className="mt-3 text-sm leading-6 text-zinc-600">{recommendationLoadingDetail}</p>
+              <div className="mt-4 h-2.5 rounded-full bg-white/90">
+                <div
+                  className="h-2.5 rounded-full bg-emerald-500 transition-all duration-500 ease-out"
+                  style={{ width: `${Math.max(recommendationProgress, 6)}%` }}
+                />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-white/90 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Current Pulse</p>
+                  <p className="mt-1 text-lg font-semibold text-zinc-950">{latestVitals.pulse > 0 ? Math.round(latestVitals.pulse) : "--"} BPM</p>
+                </div>
+                <div className="rounded-2xl bg-white/90 px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Current Resp Rate</p>
+                  <p className="mt-1 text-lg font-semibold text-zinc-950">{latestVitals.breathing > 0 ? Math.round(latestVitals.breathing) : "--"}</p>
+                </div>
+              </div>
+            </div>
+          ) : vitalsRecommendationError ? (
+            <div className="mt-4 rounded-[1.6rem] border border-rose-200 bg-rose-50/80 p-4">
+              <p className="text-lg font-semibold tracking-tight text-zinc-950">Vitals recommendation unavailable</p>
+              <p className="mt-3 text-sm leading-6 text-rose-700">{vitalsRecommendationError}</p>
+            </div>
+          ) : (
+            <>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">{recommendation.title}</h2>
+              <p className="mt-4 text-sm leading-6 text-zinc-600">{recommendation.summary}</p>
+              <p className="mt-4 text-sm leading-6 text-zinc-600">{recommendation.alignment}</p>
+              <p className="mt-4 rounded-2xl bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-700">{recommendation.nextMeal}</p>
+              <div className="mt-4 space-y-3">
+                {recommendation.reasons.map((reason: string) => (
+                  <div key={reason} className="rounded-2xl border border-zinc-100 px-4 py-3 text-sm text-zinc-600">
+                    {reason}
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenReport}
+                className="mt-5 w-full rounded-xl bg-zinc-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800"
+              >
+                {recommendation.ctaLabel}
+              </button>
+            </>
+          )}
         </section>
       </div>
 
