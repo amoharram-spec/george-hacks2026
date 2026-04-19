@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import type { DashboardData, DailyMetric, Meal, Micronutrient } from "./mock-data";
@@ -429,6 +430,14 @@ export function DashboardView({ data }: DashboardViewProps) {
 
   return (
     <main className="min-h-screen bg-[#e8e6e1] px-4 py-4 sm:px-6 lg:h-screen lg:overflow-hidden lg:px-8 lg:py-6">
+      <div className="mx-auto mb-3 flex w-full max-w-[1500px] justify-end">
+        <Link
+          href="/tdee"
+          className="text-sm font-semibold text-zinc-600 underline-offset-4 transition hover:text-zinc-950 hover:underline"
+        >
+          TDEE calculator
+        </Link>
+      </div>
       <div className="mx-auto flex h-full w-full max-w-[1500px] flex-col gap-5 lg:grid lg:grid-cols-[340px_minmax(0,1fr)_340px] lg:gap-6">
         {/* Left sidebar — calories & macros */}
         <section
