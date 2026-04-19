@@ -1,21 +1,12 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { useCallback, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { TdeeCalculator } from "../tdee/tdee-calculator";
 
 type OnboardingStep = "name" | "tdee" | "labs";
-
-type ParsedLab = {
-  key: string;
-  label: string;
-  value: number | string | null;
-  unit: string | null;
-  referenceRange: string | null;
-  flag: "low" | "normal" | "high" | "abnormal" | "unknown";
-  sourceText: string | null;
-};
 
 type LabReportResponse = {
   reportId: string;
@@ -25,18 +16,9 @@ type LabReportResponse = {
   textLength: number;
   likelyScanned: boolean;
   textPreview: string;
-  parsedLabs: ParsedLab[] | null;
   parseWarnings: string[];
   errorMessage?: string | null;
 };
-
-function formatLabValue(lab: ParsedLab) {
-  if (lab.value === null || lab.value === "") {
-    return "No value";
-  }
-
-  return `${lab.value}${lab.unit ? ` ${lab.unit}` : ""}`;
-}
 
 const stepTitles: Record<OnboardingStep, string> = {
   name: "Let’s start with your name",
@@ -51,6 +33,7 @@ const stepDescriptions: Record<OnboardingStep, string> = {
 };
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("name");
   const [name, setName] = useState("");
   const [bodyMetrics, setBodyMetrics] = useState<{ weightKg: number; heightCm: number } | null>(null);
@@ -178,25 +161,15 @@ export default function OnboardingPage() {
         method: "POST",
       });
 
-      const payload = (await response.json()) as LabReportResponse & { error?: string };
+      const payload = (await response.json()) as any;
 
       if (!response.ok) {
         setSubmitError(payload.error ?? "Parsing failed.");
         return;
       }
 
-      setReport((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          status: payload.status,
-          parsedLabs: payload.parsedLabs,
-          parseWarnings: payload.parseWarnings,
-        };
-      });
+      // Automatically redirect to dashboard after success
+      router.push("/dashboard");
     } catch {
       setSubmitError("Parsing failed. Please try again.");
     } finally {
@@ -228,7 +201,7 @@ export default function OnboardingPage() {
                 resetCurrentError();
               }}
               placeholder="Enter your full name"
-              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/10"
+              className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm font-medium text-zinc-950 outline-none shadow-sm transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 placeholder:text-zinc-400"
             />
           </div>
         </motion.div>
@@ -272,7 +245,7 @@ export default function OnboardingPage() {
           />
 
           <p className="mt-2 text-xs text-gray-500">
-            Server upload mode is capped at 4MB so it stays deployable on Vercel.
+            Your clinical data will be analyzed by our AI Bioinformatician.
           </p>
 
           {file ? <p className="mt-2 text-sm text-emerald-600">Selected: {file.name}</p> : null}
@@ -282,9 +255,9 @@ export default function OnboardingPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-10">
-      <div className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <section className="rounded-3xl border bg-white p-8 shadow-md">
+    <main className="min-h-screen bg-zinc-50/50 px-4 py-10 selection:bg-emerald-100 selection:text-emerald-900">
+      <div className="mx-auto grid w-full max-w-5xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)]">
+        <section className="rounded-[2.5rem] border border-white/80 bg-white/95 p-8 shadow-[0_20px_50px_rgba(15,23,42,0.12)] backdrop-blur-sm">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">
@@ -312,19 +285,6 @@ export default function OnboardingPage() {
             {submitError ? <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</p> : null}
 
             <div className="flex items-center gap-3">
-              {currentStep !== "name" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError("");
-                    setCurrentStep(currentStep === "labs" ? "tdee" : "name");
-                  }}
-                  className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-                >
-                  Back
-                </button>
-              ) : null}
-
               <button
                 type="submit"
                 disabled={
@@ -334,115 +294,50 @@ export default function OnboardingPage() {
                       ? !canContinueTdee
                       : !canSubmitLabs || isUploading
                 }
-                className="flex-1 rounded-xl bg-black py-3 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-2xl bg-zinc-950 py-4 text-sm font-bold text-white shadow-lg shadow-zinc-950/20 transition-all hover:bg-zinc-800 hover:shadow-xl active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
               >
                 {currentStep === "name"
-                  ? "Continue"
+                  ? "Initialize Profile"
                   : currentStep === "tdee"
-                    ? "Continue"
+                    ? "Confirm Energy Goals"
                     : isUploading
-                      ? "Uploading and extracting..."
-                      : "Upload and extract text"}
+                      ? "Uploading Laboratory Data..."
+                      : "Upload and Proceed"}
               </button>
             </div>
           </form>
         </section>
 
-        <section className="rounded-3xl border bg-white p-8 shadow-md">
+        <section className="rounded-[2.5rem] border border-white/80 bg-white/95 p-8 shadow-[0_20px_50px_rgba(15,23,42,0.12)] backdrop-blur-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-gray-950">Lab Report Processing</h2>
+              <h2 className="text-xl font-bold text-gray-950">Onboarding Preview</h2>
               <p className="mt-2 text-sm leading-6 text-gray-600">
-                Complete the three-step onboarding flow, then your PDF is uploaded, text is extracted, and lab values are saved for review.
+                Finish the steps and upload your report. Insights will be waiting for you in the dashboard.
               </p>
             </div>
-
-            {report ? (
-              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-700">
-                {report.status.replace("_", " ")}
-              </span>
-            ) : null}
           </div>
 
           {!report ? (
             <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm leading-6 text-gray-600">
-              Your extracted text preview and parsed lab values will appear here after the final upload step.
+              Ready to process your health profile?
             </div>
           ) : (
             <div className="mt-6 space-y-6">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">File</p>
-                  <p className="mt-2 text-sm font-medium text-gray-900">{report.fileName}</p>
+              <div className="rounded-2xl bg-emerald-50 p-6 text-center border border-emerald-100">
+                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-emerald-700 text-xl font-bold">✓</span>
                 </div>
-
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Extracted Text</p>
-                  <p className="mt-2 text-sm font-medium text-gray-900">{report.textLength.toLocaleString()} characters</p>
-                  <p className="mt-1 text-sm text-gray-600">
-                    {report.likelyScanned ? "Likely scanned PDF" : "Looks like text-based PDF"}
-                  </p>
-                </div>
-              </div>
-
-              {report.parseWarnings.length > 0 ? (
-                <div className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
-                  {report.parseWarnings.map((warning) => (
-                    <p key={warning}>{warning}</p>
-                  ))}
-                </div>
-              ) : null}
-
-              <div>
-                <div className="flex items-center justify-between gap-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-950">Text Preview</h3>
-                  {report.status !== "parsed" ? (
-                    <button
-                      type="button"
-                      onClick={handleParse}
-                      disabled={isParsing || report.textLength === 0}
-                      className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isParsing ? "Parsing with Gemini..." : "Parse with Gemini"}
-                    </button>
-                  ) : null}
-                </div>
-
-                <div className="mt-3 rounded-2xl bg-gray-950 p-4 text-sm leading-6 text-gray-100">
-                  {report.textPreview || "No text extracted from the PDF."}
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-950">Parsed Labs</h3>
-
-                {!report.parsedLabs || report.parsedLabs.length === 0 ? (
-                  <div className="mt-3 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-700">
-                    No parsed lab values yet.
-                  </div>
-                ) : (
-                  <div className="mt-3 grid gap-3">
-                    {report.parsedLabs.map((lab) => (
-                      <article key={lab.key} className="rounded-2xl border bg-gray-50 p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <h4 className="font-semibold text-gray-900">{lab.label}</h4>
-                            <p className="mt-1 text-sm text-gray-700">{formatLabValue(lab)}</p>
-                            {lab.referenceRange ? (
-                              <p className="mt-1 text-sm text-gray-700">Reference range: {lab.referenceRange}</p>
-                            ) : null}
-                          </div>
-
-                          <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-700">
-                            {lab.flag}
-                          </span>
-                        </div>
-
-                        {lab.sourceText ? <p className="mt-3 text-sm text-gray-700">Source: {lab.sourceText}</p> : null}
-                      </article>
-                    ))}
-                  </div>
-                )}
+                <h3 className="text-lg font-bold text-emerald-900">Upload Complete</h3>
+                <p className="text-sm text-emerald-700 mt-2 mb-6">Your bloodwork has been successfully extracted.</p>
+                <button
+                  type="button"
+                  onClick={handleParse}
+                  disabled={isParsing}
+                  className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {isParsing ? "Analyzing Biomarkers..." : "Synthesize AI Insights & Go to Dashboard"}
+                </button>
               </div>
             </div>
           )}

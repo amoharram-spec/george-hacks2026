@@ -40,6 +40,30 @@ export type Recommendation = {
   ctaLabel: string;
 };
 
+export type ProposedAdjustment = {
+  metric: string;
+  recommended_target: number;
+  unit: string;
+  reasoning: string;
+};
+
+export type AIInsight = {
+  summary: {
+    deficiencies: Array<{
+      marker: string;
+      value: string;
+      status: string;
+      impact: string;
+    }>;
+    trends: string;
+  };
+  strategy: {
+    priority_nutrients: string[];
+    explanation: string;
+  };
+  proposed_adjustments: ProposedAdjustment[];
+};
+
 export type DashboardData = {
   dateLabel: string;
   dailySummary: DailyMetric[];
@@ -48,6 +72,7 @@ export type DashboardData = {
   micronutrients: Micronutrient[];
   meals: Meal[];
   recommendation: Recommendation;
+  aiInsight?: AIInsight;
 };
 
 export const dashboardData: DashboardData = {

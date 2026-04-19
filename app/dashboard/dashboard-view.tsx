@@ -367,15 +367,207 @@ function LiveVitalsCard() {
   );
 }
 
+function AIHealthInsightsCard({ 
+  insight, 
+  loading, 
+  onAccept 
+}: { 
+  insight?: any; 
+  loading: boolean;
+  onAccept: (adjustment: any) => void;
+}) {
+  return (
+    <article className="group relative overflow-hidden rounded-[2.5rem] border border-white/80 bg-white/95 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.12)] backdrop-blur-md transition-all hover:shadow-[0_25px_60px_rgba(15,23,42,0.18)]">
+      {/* Decorative medical-style gradient accent */}
+      <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-emerald-500/5 blur-3xl transition-all group-hover:bg-emerald-500/10" />
+      
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col gap-1">
+            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-zinc-400">Clinical Persona</p>
+            <h3 className="text-sm font-bold text-zinc-950">AI Bioinformatician</h3>
+          </div>
+          <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm transition-all ${loading ? 'bg-amber-100 text-amber-700 animate-pulse' : insight ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}>
+            {loading ? 'Analyzing Bloodwork' : insight ? 'Clinical Active' : 'Waiting for Data'}
+          </div>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {!insight && !loading ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex flex-col items-center py-6 text-center"
+            >
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-50 text-zinc-400">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-sm text-zinc-500 leading-relaxed max-w-[200px] mb-6">Upload your lab results during onboarding to generate clinical insights.</p>
+              <Link 
+                href="/onboarding"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs transition active:scale-95 shadow-lg shadow-zinc-950/20"
+              >
+                Start Onboarding
+                <span className="text-zinc-400">→</span>
+              </Link>
+            </motion.div>
+          ) : loading ? (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center py-10"
+            >
+              <div className="relative mb-6">
+                <div className="h-12 w-12 rounded-full border-4 border-zinc-100 border-t-emerald-500 animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                </div>
+              </div>
+              <p className="text-sm font-bold text-zinc-950 tracking-tight">Synthesizing Biomarkers...</p>
+              <p className="mt-1 text-[10px] text-zinc-400 uppercase tracking-widest font-semibold italic">Clinical Grade Protocol</p>
+            </motion.div>
+          ) : (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              className="space-y-5"
+            >
+              <div className="relative overflow-hidden rounded-2xl border border-rose-100/50 bg-rose-50/30 p-4">
+                <div className="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-rose-500/5 blur-xl" />
+                <p className="relative z-10 text-[10px] font-bold text-rose-500 uppercase tracking-[0.2em] mb-3">Deficiencies Map</p>
+                <div className="relative z-10 space-y-2.5">
+                  {insight.summary.deficiencies.map((d: any) => (
+                    <div key={d.marker} className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-zinc-900">{d.marker}</span>
+                        <span className="text-[10px] text-zinc-500">{d.value} detected</span>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.75 rounded-md font-bold shadow-sm ${
+                        d.status.toLowerCase() === 'deficient' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-700'
+                      }`}>
+                        {d.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="relative overflow-hidden rounded-2xl border border-zinc-200/50 bg-zinc-50/50 p-4">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-4">Precision Targets</p>
+                <div className="space-y-4">
+                  {insight.proposed_adjustments.length > 0 ? (
+                    insight.proposed_adjustments.map((adj: any) => (
+                      <div key={adj.metric} className="group/item relative flex flex-col gap-2 rounded-xl bg-white p-3 border border-zinc-100 shadow-sm transition-all hover:border-emerald-200 hover:shadow-md hover:shadow-emerald-500/5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-zinc-950">{adj.metric}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-medium text-zinc-400">New Target</span>
+                            <span className="text-xs font-bold text-emerald-600">{adj.recommended_target}{adj.unit}</span>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">
+                          <span className="font-bold text-zinc-400">Reason: </span>
+                          {adj.reasoning}
+                        </p>
+                        <button 
+                          onClick={() => onAccept(adj)}
+                          className="mt-1 flex items-center justify-center gap-2 w-full py-2 bg-zinc-950 hover:bg-emerald-600 text-white text-[10px] font-bold rounded-lg transition-all duration-300 active:scale-95 shadow-md shadow-zinc-950/10 hover:shadow-emerald-500/20"
+                        >
+                          Accept Adjustment
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex flex-col items-center py-2 text-center">
+                      <div className="h-2 w-2 rounded-full bg-emerald-500 mb-2 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Profile Optimized</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="px-1">
+                <p className="text-[9px] text-zinc-400 leading-relaxed text-center italic">
+                  Note: Adjustments are temporary for the current session. Reference medical professional before permanent dietary changes.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </article>
+  );
+}
+
+
 export function DashboardView({ data }: DashboardViewProps) {
+  const [currentData, setCurrentData] = useState(data);
+  const [aiInsight, setAiInsight] = useState<any>(null);
+  const [insightLoading, setInsightLoading] = useState(true);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [activeScrollArea, setActiveScrollArea] = useState<"left" | "right" | "meals" | null>(null);
   const leftSidebarRef = useRef<HTMLElement | null>(null);
   const rightColumnRef = useRef<HTMLElement | null>(null);
   const mealsListRef = useRef<HTMLDivElement | null>(null);
 
-  const calories = data.dailySummary.find((metric) => metric.label === "Calories");
-  const water = data.supportMetrics.find((metric) => metric.label === "Water");
+  const calories = currentData.dailySummary.find((metric) => metric.label === "Calories");
+  const water = currentData.supportMetrics.find((metric) => metric.label === "Water");
+
+  useEffect(() => {
+    const fetchLatestInsight = async () => {
+      try {
+        const res = await fetch("/api/lab-reports/latest");
+        if (res.ok) {
+          const { analysis } = await res.json();
+          setAiInsight(analysis);
+        }
+      } catch (err) {
+        console.error("Failed to fetch latest insight", err);
+      } finally {
+        setInsightLoading(false);
+      }
+    };
+
+    fetchLatestInsight();
+  }, []);
+
+  const handleAcceptAdjustment = (adjustment: any) => {
+    setCurrentData(prev => {
+      const newData = { ...prev };
+      
+      // Update dailySummary (Calories, etc)
+      const summaryIdx = newData.dailySummary.findIndex(m => m.label.toLowerCase() === adjustment.metric.toLowerCase());
+      if (summaryIdx > -1) {
+        newData.dailySummary[summaryIdx].target = adjustment.recommended_target;
+      }
+
+      // Update micronutrients
+      const microIdx = newData.micronutrients.findIndex(m => m.label.toLowerCase() === adjustment.metric.toLowerCase());
+      if (microIdx > -1) {
+        newData.micronutrients[microIdx].target = adjustment.recommended_target;
+        // Recalculate status based on consumed/new target
+        const m = newData.micronutrients[microIdx];
+        const progress = (m.consumed / m.target) * 100;
+        if (progress > 110) m.status = "exceeded";
+        else if (progress < 90) m.status = "low";
+        else m.status = "on track";
+      }
+
+      return newData;
+    });
+
+    // Remove the accepted adjustment from the list
+    setAiInsight((prev: any) => ({
+      ...prev,
+      proposed_adjustments: prev.proposed_adjustments.filter((a: any) => a.metric !== adjustment.metric)
+    }));
+  };
 
   useEffect(() => {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -446,15 +638,20 @@ export function DashboardView({ data }: DashboardViewProps) {
         >
           <LiveVitalsCard />
           <CaloriesCard metric={calories} />
-          <MacroWaterCard macros={data.macroRings} water={water} />
-          <MicronutrientsCard micronutrients={data.micronutrients} />
+          <MacroWaterCard macros={currentData.macroRings} water={water} />
+          <MicronutrientsCard micronutrients={currentData.micronutrients} />
         </section>
 
         <section
           ref={rightColumnRef}
           className={`scrollbar-fade flex min-h-0 flex-col lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-2 ${activeScrollArea === "right" ? "scrollbar-fade-active" : ""}`}
         >
-          <section className="flex min-h-0 flex-1 flex-col rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:min-h-[720px]">
+          <AIHealthInsightsCard 
+            insight={aiInsight} 
+            loading={insightLoading}
+            onAccept={handleAcceptAdjustment}
+          />
+          <section className="flex min-h-0 flex-1 flex-col rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:min-h-[720px] mt-5">
             <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Today&apos;s meals</p>
@@ -464,13 +661,13 @@ export function DashboardView({ data }: DashboardViewProps) {
                 Scroll the list while keeping the rest of the dashboard visible on one page.
               </p>
             </div>
-
+ 
             <div
               ref={mealsListRef}
               className={`scrollbar-fade mt-5 flex-1 overflow-y-auto pr-1 ${activeScrollArea === "meals" ? "scrollbar-fade-active" : ""}`}
             >
               <div className="space-y-4 pb-2">
-                {data.meals.map((meal) => (
+                {currentData.meals.map((meal) => (
                   <MealCard key={meal.id} meal={meal} />
                 ))}
               </div>
