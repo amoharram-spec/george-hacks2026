@@ -874,6 +874,7 @@ export function DashboardView({ data }: DashboardViewProps) {
   const mealsListRef = useRef<HTMLDivElement | null>(null);
   const mealFileInputRef = useRef<HTMLInputElement>(null);
   const analyzedVitalsSessionRef = useRef<number | null>(null);
+  const dismissedVitalsSessionRef = useRef<number | null>(null);
 
   const dashboardData = useMemo<DashboardData>(() => {
     const baseData = uploadedDashboardData ?? data;
@@ -945,6 +946,10 @@ export function DashboardView({ data }: DashboardViewProps) {
   }, []);
 
   const handleVitalsChange = useCallback((vitals: LiveVitals) => {
+    if (vitals.sessionId !== null && dismissedVitalsSessionRef.current === vitals.sessionId) {
+      return;
+    }
+
     setLatestVitals(vitals);
 
     if (vitals.sessionId !== null && activeVitalsSessionId === null) {
@@ -962,6 +967,7 @@ export function DashboardView({ data }: DashboardViewProps) {
   }, [activeVitalsSessionId, requestVitalsRecommendation]);
 
   const handleVitalsUpload = useCallback((vitals: LiveVitals) => {
+    dismissedVitalsSessionRef.current = null;
     setLatestVitals(vitals);
     setActiveVitalsSessionId(vitals.sessionId);
     analyzedVitalsSessionRef.current = null;
@@ -1157,6 +1163,7 @@ export function DashboardView({ data }: DashboardViewProps) {
   const quickActions = [mealUploading ? "Scanning meal..." : "Upload Picture of meal", "View Plan", "Export Report"] as const;
   const recommendationIsLoading = vitalsRecommendationState === "reading" || vitalsRecommendationState === "analyzing";
   const recommendationUsesVitals = vitalsRecommendationState === "ready" && vitalsRecommendation !== null;
+  const resetDisabled = recommendationIsLoading || (!recommendationUsesVitals && !vitalsRecommendationError);
   const recommendationProgress = vitalsRecommendationState === "reading"
     ? latestVitals.progressPercent
     : vitalsRecommendationState === "analyzing"
@@ -1239,13 +1246,15 @@ export function DashboardView({ data }: DashboardViewProps) {
             <button
               type="button"
               onClick={() => {
+                dismissedVitalsSessionRef.current = activeVitalsSessionId ?? latestVitals.sessionId;
                 setActiveVitalsSessionId(null);
+                setLatestVitals(getEmptyLiveVitals());
                 setVitalsRecommendationState("idle");
                 setVitalsRecommendation(null);
                 setVitalsRecommendationError("");
                 analyzedVitalsSessionRef.current = null;
               }}
-              disabled={!recommendationUsesVitals && !recommendationIsLoading && !vitalsRecommendationError}
+              disabled={resetDisabled}
               className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Reset
