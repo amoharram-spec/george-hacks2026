@@ -6,7 +6,7 @@ import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent
 
 import { readStoredTdeeResult } from "@/lib/tdee-storage";
 
-import type { DashboardData, DailyMetric, Meal, Micronutrient } from "./types";
+import type { AIInsight, DashboardData, DailyMetric, Meal, Micronutrient, ProposedAdjustment } from "./types";
 
 type DashboardViewProps = {
   data: DashboardData;
@@ -59,6 +59,92 @@ function formatConfidence(confidence: number | null) {
   }
 
   return `${Math.round(confidence * 100)}%`;
+}
+
+function getMicronutrientStatus(consumed: number, target: number): Micronutrient["status"] {
+  const progress = target === 0 ? 0 : (consumed / target) * 100;
+
+  if (progress > 110) {
+    return "exceeded";
+  }
+
+  if (progress < 90) {
+    return "low";
+  }
+
+  return "on track";
+}
+
+function normalizeInsight(input: unknown): AIInsight | null {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+
+  const candidate = input as {
+    summary?: {
+      deficiencies?: Array<{ marker?: string; value?: string; status?: string; impact?: string }>;
+      trends?: string;
+    };
+    strategy?: {
+      priorityNutrients?: string[];
+      priority_nutrients?: string[];
+      explanation?: string;
+    };
+    proposedAdjustments?: Array<{
+      metric?: string;
+      recommendedTarget?: number;
+      recommended_target?: number;
+      unit?: string;
+      reasoning?: string;
+    }>;
+    proposed_adjustments?: Array<{
+      metric?: string;
+      recommendedTarget?: number;
+      recommended_target?: number;
+      unit?: string;
+      reasoning?: string;
+    }>;
+  };
+
+  const deficiencies = Array.isArray(candidate.summary?.deficiencies)
+    ? candidate.summary.deficiencies
+        .filter((item): item is { marker: string; value: string; status: string; impact: string } => Boolean(item?.marker))
+        .map((item) => ({
+          marker: item.marker,
+          value: item.value ?? "",
+          status: item.status ?? "Unknown",
+          impact: item.impact ?? "",
+        }))
+    : [];
+
+  const rawAdjustments = Array.isArray(candidate.proposedAdjustments)
+    ? candidate.proposedAdjustments
+    : Array.isArray(candidate.proposed_adjustments)
+      ? candidate.proposed_adjustments
+      : [];
+
+  const proposedAdjustments = rawAdjustments
+    .filter((item): item is { metric: string; unit: string; reasoning: string; recommendedTarget?: number; recommended_target?: number } =>
+      Boolean(item?.metric) && Boolean(item?.unit),
+    )
+    .map((item) => ({
+      metric: item.metric,
+      recommendedTarget: item.recommendedTarget ?? item.recommended_target ?? 0,
+      unit: item.unit,
+      reasoning: item.reasoning ?? "",
+    }));
+
+  return {
+    summary: {
+      deficiencies,
+      trends: candidate.summary?.trends ?? "",
+    },
+    strategy: {
+      priorityNutrients: candidate.strategy?.priorityNutrients ?? candidate.strategy?.priority_nutrients ?? [],
+      explanation: candidate.strategy?.explanation ?? "",
+    },
+    proposedAdjustments,
+  };
 }
 
 function CaloriesCard({ metric }: { metric: DailyMetric }) {
@@ -414,8 +500,153 @@ function LiveVitalsCard() {
   );
 }
 
+function AIHealthInsightsCard({ 
+  insight, 
+  loading, 
+  onAccept 
+}: { 
+  insight: AIInsight | null;
+  loading: boolean;
+  onAccept: (adjustment: ProposedAdjustment) => void;
+}) {
+  const deficiencies = insight?.summary.deficiencies ?? [];
+  const proposedAdjustments = insight?.proposedAdjustments ?? [];
+
+  return (
+    <article className="group relative overflow-hidden rounded-[2.5rem] border border-white/80 bg-white/95 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.12)] backdrop-blur-md transition-all hover:shadow-[0_25px_60px_rgba(15,23,42,0.18)]">
+      {/* Decorative medical-style gradient accent */}
+      <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-emerald-500/5 blur-3xl transition-all group-hover:bg-emerald-500/10" />
+      
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col gap-1">
+            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-zinc-400">Clinical Persona</p>
+            <h3 className="text-sm font-bold text-zinc-950">AI Bioinformatician</h3>
+          </div>
+          <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm transition-all ${loading ? 'bg-amber-100 text-amber-700 animate-pulse' : insight ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}>
+            {loading ? 'Analyzing Bloodwork' : insight ? 'Clinical Active' : 'Waiting for Data'}
+          </div>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {!insight && !loading ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex flex-col items-center py-6 text-center"
+            >
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-50 text-zinc-400">
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-sm text-zinc-500 leading-relaxed max-w-[200px] mb-6">Upload your lab results during onboarding to generate clinical insights.</p>
+              <Link 
+                href="/onboarding"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs transition active:scale-95 shadow-lg shadow-zinc-950/20"
+              >
+                Start Onboarding
+                <span className="text-zinc-400">→</span>
+              </Link>
+            </motion.div>
+          ) : loading ? (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center py-10"
+            >
+              <div className="relative mb-6">
+                <div className="h-12 w-12 rounded-full border-4 border-zinc-100 border-t-emerald-500 animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                </div>
+              </div>
+              <p className="text-sm font-bold text-zinc-950 tracking-tight">Synthesizing Biomarkers...</p>
+              <p className="mt-1 text-[10px] text-zinc-400 uppercase tracking-widest font-semibold italic">Clinical Grade Protocol</p>
+            </motion.div>
+          ) : (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              className="space-y-5"
+            >
+              <div className="relative overflow-hidden rounded-2xl border border-rose-100/50 bg-rose-50/30 p-4">
+                <div className="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-rose-500/5 blur-xl" />
+                <p className="relative z-10 text-[10px] font-bold text-rose-500 uppercase tracking-[0.2em] mb-3">Deficiencies Map</p>
+                <div className="relative z-10 space-y-2.5">
+                  {deficiencies.map((d) => (
+                    <div key={d.marker} className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-zinc-900">{d.marker}</span>
+                        <span className="text-[10px] text-zinc-500">{d.value} detected</span>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.75 rounded-md font-bold shadow-sm ${
+                        d.status.toLowerCase() === 'deficient' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-700'
+                      }`}>
+                        {d.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="relative overflow-hidden rounded-2xl border border-zinc-200/50 bg-zinc-50/50 p-4">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-4">Precision Targets</p>
+                <div className="space-y-4">
+                  {proposedAdjustments.length > 0 ? (
+                    proposedAdjustments.map((adj) => (
+                      <div key={adj.metric} className="group/item relative flex flex-col gap-2 rounded-xl bg-white p-3 border border-zinc-100 shadow-sm transition-all hover:border-emerald-200 hover:shadow-md hover:shadow-emerald-500/5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-zinc-950">{adj.metric}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-medium text-zinc-400">New Target</span>
+                            <span className="text-xs font-bold text-emerald-600">{adj.recommendedTarget}{adj.unit}</span>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">
+                          <span className="font-bold text-zinc-400">Reason: </span>
+                          {adj.reasoning}
+                        </p>
+                        <button 
+                          onClick={() => onAccept(adj)}
+                          className="mt-1 flex items-center justify-center gap-2 w-full py-2 bg-zinc-950 hover:bg-emerald-600 text-white text-[10px] font-bold rounded-lg transition-all duration-300 active:scale-95 shadow-md shadow-zinc-950/10 hover:shadow-emerald-500/20"
+                        >
+                          Accept Adjustment
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex flex-col items-center py-2 text-center">
+                      <div className="h-2 w-2 rounded-full bg-emerald-500 mb-2 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Profile Optimized</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="px-1">
+                <p className="text-[9px] text-zinc-400 leading-relaxed text-center italic">
+                  Note: Adjustments are temporary for the current session. Reference medical professional before permanent dietary changes.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </article>
+  );
+}
+
+
 export function DashboardView({ data }: DashboardViewProps) {
   const [uploadedDashboardData, setUploadedDashboardData] = useState<DashboardData | null>(null);
+  const [acceptedAdjustments, setAcceptedAdjustments] = useState<ProposedAdjustment[]>([]);
+  const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
+  const [insightLoading, setInsightLoading] = useState(true);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [mealUploading, setMealUploading] = useState(false);
   const [mealUploadError, setMealUploadError] = useState("");
@@ -428,24 +659,88 @@ export function DashboardView({ data }: DashboardViewProps) {
 
   const dashboardData = useMemo<DashboardData>(() => {
     const baseData = uploadedDashboardData ?? data;
+    const adjustedData = {
+      ...baseData,
+      dailySummary: baseData.dailySummary.map((metric) => ({ ...metric })),
+      supportMetrics: baseData.supportMetrics.map((metric) => ({ ...metric })),
+      micronutrients: baseData.micronutrients.map((nutrient) => ({ ...nutrient })),
+    };
+
+    acceptedAdjustments.forEach((adjustment) => {
+      const summaryMetric = adjustedData.dailySummary.find(
+        (metric) => metric.label.toLowerCase() === adjustment.metric.toLowerCase(),
+      );
+
+      if (summaryMetric) {
+        summaryMetric.target = adjustment.recommendedTarget;
+      }
+
+      const micronutrient = adjustedData.micronutrients.find(
+        (metric) => metric.label.toLowerCase() === adjustment.metric.toLowerCase(),
+      );
+
+      if (micronutrient) {
+        micronutrient.target = adjustment.recommendedTarget;
+        micronutrient.status = getMicronutrientStatus(micronutrient.consumed, micronutrient.target);
+      }
+    });
 
     if (calorieTargetOverride === null) {
-      return baseData;
+      return adjustedData;
     }
 
     return {
-      ...baseData,
-      dailySummary: baseData.dailySummary.map((metric) =>
+      ...adjustedData,
+      dailySummary: adjustedData.dailySummary.map((metric) =>
         metric.label === "Calories" ? { ...metric, target: calorieTargetOverride } : metric,
       ),
-      supportMetrics: baseData.supportMetrics.map((metric) =>
+      supportMetrics: adjustedData.supportMetrics.map((metric) =>
         metric.label === "Calories" ? { ...metric, target: calorieTargetOverride } : metric,
       ),
     };
-  }, [calorieTargetOverride, data, uploadedDashboardData]);
+  }, [acceptedAdjustments, calorieTargetOverride, data, uploadedDashboardData]);
 
   const calories = dashboardData.dailySummary.find((metric) => metric.label === "Calories");
   const water = dashboardData.supportMetrics.find((metric) => metric.label === "Water");
+
+  useEffect(() => {
+    const fetchLatestInsight = async () => {
+      try {
+        const res = await fetch("/api/lab-reports/latest");
+        if (res.ok) {
+          const { analysis } = await res.json();
+          setAiInsight(normalizeInsight(analysis));
+        }
+      } catch (err) {
+        console.error("Failed to fetch latest insight", err);
+      } finally {
+        setInsightLoading(false);
+      }
+    };
+
+    fetchLatestInsight();
+  }, []);
+
+  const handleAcceptAdjustment = (adjustment: ProposedAdjustment) => {
+    setAcceptedAdjustments((current) => {
+      if (current.some((item) => item.metric === adjustment.metric)) {
+        return current;
+      }
+
+      return [...current, adjustment];
+    });
+
+    setAiInsight((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        proposedAdjustments: current.proposedAdjustments.filter((item) => item.metric !== adjustment.metric),
+      };
+    });
+  };
 
   useEffect(() => {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -571,7 +866,12 @@ export function DashboardView({ data }: DashboardViewProps) {
           ref={rightColumnRef}
           className={`scrollbar-fade flex min-h-0 flex-col lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-2 ${activeScrollArea === "right" ? "scrollbar-fade-active" : ""}`}
         >
-          <section className="flex min-h-0 flex-1 flex-col rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:min-h-[720px]">
+          <AIHealthInsightsCard 
+            insight={aiInsight} 
+            loading={insightLoading}
+            onAccept={handleAcceptAdjustment}
+          />
+          <section className="flex min-h-0 flex-1 flex-col rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:min-h-[720px] mt-5">
             <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Today&apos;s meals</p>
@@ -581,7 +881,7 @@ export function DashboardView({ data }: DashboardViewProps) {
                 Scan a meal image from the + menu to detect foods, ground the numbers with USDA data, and save the result.
               </p>
             </div>
-
+ 
             <div
               ref={mealsListRef}
               className={`scrollbar-fade mt-5 flex-1 overflow-y-auto pr-1 ${activeScrollArea === "meals" ? "scrollbar-fade-active" : ""}`}

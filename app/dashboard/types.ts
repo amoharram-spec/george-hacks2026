@@ -72,6 +72,30 @@ export type Recommendation = {
   ctaLabel: string;
 };
 
+export type ProposedAdjustment = {
+  metric: string;
+  recommendedTarget: number;
+  unit: string;
+  reasoning: string;
+};
+
+export type AIInsight = {
+  summary: {
+    deficiencies: Array<{
+      marker: string;
+      value: string;
+      status: string;
+      impact: string;
+    }>;
+    trends: string;
+  };
+  strategy: {
+    priorityNutrients: string[];
+    explanation: string;
+  };
+  proposedAdjustments: ProposedAdjustment[];
+};
+
 export type DashboardData = {
   dateLabel: string;
   dailySummary: DailyMetric[];
