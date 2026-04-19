@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 
+import { getGeminiApiKey } from "@/lib/env";
 import { getDatabase } from "@/lib/mongodb";
 
 export const runtime = "nodejs";
@@ -89,10 +90,13 @@ export async function POST(
   segmentData: { params: Promise<{ reportId: string }> },
 ) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getGeminiApiKey();
 
     if (!apiKey) {
-      return Response.json({ error: "Missing GEMINI_API_KEY environment variable." }, { status: 500 });
+      return Response.json(
+        { error: "Missing Gemini API key. Set GEMINI_API_KEY or GOOGLE_API_KEY in .env.local." },
+        { status: 500 },
+      );
     }
 
     const { reportId } = await segmentData.params;

@@ -1,54 +1,4 @@
-export type DailyMetric = {
-  label: string;
-  consumed: number;
-  target: number;
-  unit: string;
-  tone: string;
-};
-
-export type Micronutrient = {
-  label: string;
-  consumed: number;
-  target: number;
-  unit: string;
-  status: "low" | "on track" | "exceeded";
-  tone: string;
-};
-
-export type Meal = {
-  id: string;
-  name: string;
-  time: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  note: string;
-  palette: string;
-  micros: Array<{
-    label: string;
-    amount: string;
-  }>;
-};
-
-export type Recommendation = {
-  title: string;
-  summary: string;
-  alignment: string;
-  nextMeal: string;
-  reasons: string[];
-  ctaLabel: string;
-};
-
-export type DashboardData = {
-  dateLabel: string;
-  dailySummary: DailyMetric[];
-  macroRings: DailyMetric[];
-  supportMetrics: DailyMetric[];
-  micronutrients: Micronutrient[];
-  meals: Meal[];
-  recommendation: Recommendation;
-};
+import type { DashboardData } from "./types";
 
 export const dashboardData: DashboardData = {
   dateLabel: "Saturday, April 18",
@@ -69,28 +19,34 @@ export const dashboardData: DashboardData = {
     { label: "Water", consumed: 1.8, target: 2.7, unit: "L", tone: "bg-cyan-400" },
   ],
   micronutrients: [
-    { label: "Iron", consumed: 11, target: 18, unit: "mg", status: "low", tone: "bg-rose-300" },
-    { label: "Magnesium", consumed: 250, target: 400, unit: "mg", status: "low", tone: "bg-violet-300" },
-    { label: "Potassium", consumed: 2600, target: 3400, unit: "mg", status: "low", tone: "bg-indigo-300" },
-    { label: "Calcium", consumed: 920, target: 1000, unit: "mg", status: "on track", tone: "bg-sky-300" },
-    { label: "Sodium", consumed: 2450, target: 2300, unit: "mg", status: "exceeded", tone: "bg-orange-300" },
-    { label: "Vitamin D", consumed: 14, target: 20, unit: "mcg", status: "low", tone: "bg-yellow-300" },
-    { label: "Vitamin B12", consumed: 3.9, target: 2.4, unit: "mcg", status: "exceeded", tone: "bg-teal-300" },
-    { label: "Folate", consumed: 350, target: 400, unit: "mcg", status: "on track", tone: "bg-green-300" },
-    { label: "Zinc", consumed: 9, target: 11, unit: "mg", status: "on track", tone: "bg-emerald-300" },
-    { label: "Omega-3", consumed: 1.2, target: 1.6, unit: "g", status: "low", tone: "bg-cyan-300" },
-    { label: "Vitamin C", consumed: 96, target: 90, unit: "mg", status: "exceeded", tone: "bg-pink-300" },
-    { label: "Vitamin A", consumed: 770, target: 900, unit: "mcg", status: "on track", tone: "bg-fuchsia-300" },
+    { key: "iron", label: "Iron", consumed: 11, target: 18, unit: "mg", status: "low", tone: "bg-rose-300" },
+    { key: "magnesium", label: "Magnesium", consumed: 250, target: 400, unit: "mg", status: "low", tone: "bg-violet-300" },
+    { key: "potassium", label: "Potassium", consumed: 2600, target: 3400, unit: "mg", status: "low", tone: "bg-indigo-300" },
+    { key: "calcium", label: "Calcium", consumed: 920, target: 1000, unit: "mg", status: "on track", tone: "bg-sky-300" },
+    { key: "sodium", label: "Sodium", consumed: 2450, target: 2300, unit: "mg", status: "exceeded", tone: "bg-orange-300" },
+    { key: "vitamin-d", label: "Vitamin D", consumed: 14, target: 20, unit: "mcg", status: "low", tone: "bg-yellow-300" },
+    { key: "vitamin-b12", label: "Vitamin B12", consumed: 3.9, target: 2.4, unit: "mcg", status: "exceeded", tone: "bg-teal-300" },
+    { key: "folate", label: "Folate", consumed: 350, target: 400, unit: "mcg", status: "on track", tone: "bg-green-300" },
+    { key: "zinc", label: "Zinc", consumed: 9, target: 11, unit: "mg", status: "on track", tone: "bg-emerald-300" },
+    { key: "omega-3", label: "Omega-3", consumed: 1.2, target: 1.6, unit: "g", status: "low", tone: "bg-cyan-300" },
+    { key: "vitamin-c", label: "Vitamin C", consumed: 96, target: 90, unit: "mg", status: "exceeded", tone: "bg-pink-300" },
+    { key: "vitamin-a", label: "Vitamin A", consumed: 770, target: 900, unit: "mcg", status: "on track", tone: "bg-fuchsia-300" },
   ],
   meals: [
     {
       id: "meal-1",
       name: "Salmon Bowl with Quinoa",
       time: "12:25 PM",
+      imageUrl: null,
+      confidence: 0.94,
+      servingSizeEstimate: "1 bowl",
       calories: 458,
       protein: 34,
       carbs: 38,
       fat: 18,
+      fiber: 6,
+      sugar: 4,
+      sodium: 410,
       note: "Strong omega-3 support and steady protein coverage.",
       palette: "from-orange-200 via-rose-100 to-amber-50",
       micros: [
@@ -99,15 +55,59 @@ export const dashboardData: DashboardData = {
         { label: "Magnesium", amount: "92mg" },
         { label: "Potassium", amount: "760mg" },
       ],
+      foods: [
+        {
+          name: "Cooked salmon",
+          confidence: 0.96,
+          servingSizeEstimate: "5 oz fillet",
+          gramsEstimate: 142,
+          calories: 295,
+          protein: 31,
+          carbs: 0,
+          fat: 18,
+          fiber: 0,
+          sugar: 0,
+          sodium: 90,
+          micronutrients: [
+            { key: "vitamin-d", label: "Vitamin D", amount: 8.4, unit: "mcg" },
+            { key: "omega-3", label: "Omega-3", amount: 1.1, unit: "g" },
+          ],
+          dataSource: "USDA FoodData Central",
+        },
+        {
+          name: "Cooked quinoa",
+          confidence: 0.9,
+          servingSizeEstimate: "3/4 cup",
+          gramsEstimate: 140,
+          calories: 163,
+          protein: 6,
+          carbs: 31,
+          fat: 3,
+          fiber: 4,
+          sugar: 1,
+          sodium: 13,
+          micronutrients: [
+            { key: "magnesium", label: "Magnesium", amount: 64, unit: "mg" },
+          ],
+          dataSource: "USDA FoodData Central",
+        },
+      ],
+      warnings: [],
     },
     {
       id: "meal-2",
       name: "Eggs and Sourdough",
       time: "8:05 AM",
+      imageUrl: null,
+      confidence: 0.92,
+      servingSizeEstimate: "2 eggs + 2 slices",
       calories: 346,
       protein: 21,
       carbs: 27,
       fat: 16,
+      fiber: 2,
+      sugar: 3,
+      sodium: 540,
       note: "Good start for protein, but light on magnesium and fiber.",
       palette: "from-yellow-100 via-stone-100 to-white",
       micros: [
@@ -116,15 +116,42 @@ export const dashboardData: DashboardData = {
         { label: "Iron", amount: "2.8mg" },
         { label: "Sodium", amount: "540mg" },
       ],
+      foods: [
+        {
+          name: "Whole eggs",
+          confidence: 0.95,
+          servingSizeEstimate: "2 large eggs",
+          gramsEstimate: 100,
+          calories: 143,
+          protein: 13,
+          carbs: 1,
+          fat: 10,
+          fiber: 0,
+          sugar: 1,
+          sodium: 140,
+          micronutrients: [
+            { key: "choline", label: "Choline", amount: 280, unit: "mg" },
+            { key: "vitamin-b12", label: "Vitamin B12", amount: 1.2, unit: "mcg" },
+          ],
+          dataSource: "USDA FoodData Central",
+        },
+      ],
+      warnings: [],
     },
     {
       id: "meal-3",
       name: "Greek Yogurt Berry Cup",
       time: "3:40 PM",
+      imageUrl: null,
+      confidence: 0.95,
+      servingSizeEstimate: "1 cup",
       calories: 218,
       protein: 17,
       carbs: 24,
       fat: 4,
+      fiber: 3,
+      sugar: 17,
+      sodium: 72,
       note: "Helps calcium and protein, but still leaves iron low for the day.",
       palette: "from-sky-100 via-violet-50 to-white",
       micros: [
@@ -133,6 +160,26 @@ export const dashboardData: DashboardData = {
         { label: "Potassium", amount: "310mg" },
         { label: "Folate", amount: "42mcg" },
       ],
+      foods: [
+        {
+          name: "Nonfat Greek yogurt",
+          confidence: 0.96,
+          servingSizeEstimate: "3/4 cup",
+          gramsEstimate: 170,
+          calories: 100,
+          protein: 17,
+          carbs: 6,
+          fat: 0,
+          fiber: 0,
+          sugar: 6,
+          sodium: 61,
+          micronutrients: [
+            { key: "calcium", label: "Calcium", amount: 187, unit: "mg" },
+          ],
+          dataSource: "USDA FoodData Central",
+        },
+      ],
+      warnings: [],
     },
   ],
   recommendation: {

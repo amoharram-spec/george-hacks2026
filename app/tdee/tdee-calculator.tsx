@@ -12,24 +12,34 @@ import {
   type ActivityLevel,
   type NutritionGoal,
   type Sex,
+  type TdeeResult,
 } from "@/lib/tdee";
 
 type UnitSystem = "metric" | "imperial";
 
+/**
+ * Safely parses a string into a positive float. Returns null if invalid or <= 0.
+ * Useful for validating raw form inputs before doing math.
+ */
 function parsePositive(value: string): number | null {
   const n = Number.parseFloat(value);
   if (!Number.isFinite(n) || n <= 0) return null;
   return n;
 }
 
+/**
+ * Props for the TdeeCalculator component.
+ */
 export type TdeeCalculatorProps = {
   /** `page` = full /tdee layout with title and dashboard link; `embedded` = flows inside another screen (e.g. onboarding). */
   variant?: "page" | "embedded";
   /** When inputs yield a valid height/weight, parent can use these for APIs (e.g. lab upload). */
   onMetricsChange?: (metrics: { weightKg: number; heightCm: number } | null) => void;
+  /** When inputs yield a valid result, parent can persist the calorie target. */
+  onResultChange?: (result: TdeeResult | null) => void;
 };
 
-export function TdeeCalculator({ variant = "page", onMetricsChange }: TdeeCalculatorProps) {
+export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChange }: TdeeCalculatorProps) {
   const embedded = variant === "embedded";
   const activityRadioName = embedded ? "onboarding-tdee-activity" : "tdee-activity";
   const goalRadioName = embedded ? "onboarding-tdee-goal" : "tdee-goal";
@@ -49,6 +59,11 @@ export function TdeeCalculator({ variant = "page", onMetricsChange }: TdeeCalcul
   const [activity, setActivity] = useState<ActivityLevel>("moderate");
   const [goal, setGoal] = useState<NutritionGoal>("lose_weight");
 
+  /**
+   * Complex derived state: We compute numerical inputs on the fly.
+   * By keeping the real state as raw strings (e.g., `weight`, `height`), we avoid forcing 
+   * formatting on users as they type. This side-effect-free memo handles metric vs imperial conversions.
+   */
   const parsedInputs = useMemo(() => {
     const ageYears = parsePositive(age);
     if (ageYears === null || ageYears < 13 || ageYears > 100) return null;
@@ -77,6 +92,10 @@ export function TdeeCalculator({ variant = "page", onMetricsChange }: TdeeCalcul
     return { weightKg, heightCmVal, ageYears };
   }, [age, heightCm, heightFt, heightIn, units, weight]);
 
+  /**
+   * Executes the actual TDEE calculation only when valid form inputs exist.
+   * Changes in user goal or activity immediately reflect in real-time UI without pressing "Submit".
+   */
   const result = useMemo(() => {
     if (!parsedInputs) return null;
     return calculateTdee({
@@ -103,6 +122,11 @@ export function TdeeCalculator({ variant = "page", onMetricsChange }: TdeeCalcul
       parsedInputs ? { weightKg: parsedInputs.weightKg, heightCm: parsedInputs.heightCmVal } : null,
     );
   }, [onMetricsChange, parsedInputs]);
+
+  useEffect(() => {
+    if (!onResultChange) return;
+    onResultChange(result);
+  }, [onResultChange, result]);
 
   return (
     <div className={embedded ? "w-full" : "mx-auto w-full max-w-lg"}>

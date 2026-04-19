@@ -3,10 +3,16 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useState, type ChangeEvent, type FormEvent } from "react";
 
+import { writeStoredTdeeResult } from "@/lib/tdee-storage";
+import type { TdeeResult } from "@/lib/tdee";
+
 import { TdeeCalculator } from "../tdee/tdee-calculator";
 
 type OnboardingStep = "name" | "tdee" | "labs";
 
+/**
+ * Shape of a medical lab marker successfully parsed by Gemini.
+ */
 type ParsedLab = {
   key: string;
   label: string;
@@ -17,6 +23,12 @@ type ParsedLab = {
   sourceText: string | null;
 };
 
+/**
+ * Encapsulates the entire lifecycle of a lab report upload.
+ * It tracks the multi-step flow: 
+ * 1. File uploaded and raw text extracted
+ * 2. Sent to Gemini for structured JSON parsing (`parsedLabs`)
+ */
 type LabReportResponse = {
   reportId: string;
   status: "text_extracted" | "parsed";
@@ -71,6 +83,19 @@ export default function OnboardingPage() {
     setBodyMetrics(metrics);
   }, []);
 
+  const handleTdeeResult = useCallback((result: TdeeResult | null) => {
+    writeStoredTdeeResult(
+      result
+        ? {
+            tdee: result.tdee,
+            targetCalories: result.targetCalories,
+            rangeMin: result.rangeMin,
+            rangeMax: result.rangeMax,
+          }
+        : null,
+    );
+  }, []);
+
   const resetCurrentError = () => {
     if (error) setError("");
   };
@@ -95,6 +120,7 @@ export default function OnboardingPage() {
     setSubmitError("");
   };
 
+  /** Continues wizard logic, ensuring user fields are filled correctly before proceeding. */
   const goToNextStep = () => {
     if (currentStep === "name") {
       if (!canContinueName) {
@@ -118,6 +144,11 @@ export default function OnboardingPage() {
     }
   };
 
+  /**
+   * Final step submission handler. 
+   * Form data contains the PDF file and user metadata. 
+   * Calls an API route that stores the PDF and extracts raw text but *does not* structure the labs mathematically yet.
+   */
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -167,6 +198,10 @@ export default function OnboardingPage() {
     }
   };
 
+  /**
+   * Separate logic specifically to call Gemini bounding.
+   * We offload extraction to a second step so UI doesn't time out while Gemini reads huge medical documents.
+   */
   const handleParse = async () => {
     if (!report) return;
 
@@ -245,7 +280,11 @@ export default function OnboardingPage() {
           transition={{ duration: 0.28, ease: "easeOut" }}
           className="space-y-4"
         >
-          <TdeeCalculator variant="embedded" onMetricsChange={handleTdeeMetrics} />
+          <TdeeCalculator
+            variant="embedded"
+            onMetricsChange={handleTdeeMetrics}
+            onResultChange={handleTdeeResult}
+          />
         </motion.div>
       );
     }

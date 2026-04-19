@@ -90,6 +90,7 @@ Create a `.env.local` file in the project root:
 ```env
 MONGODB_URI=your_mongodb_connection_string
 GEMINI_API_KEY=your_gemini_api_key
+USDA_API_KEY=your_usda_fooddata_central_api_key
 BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
 PRESAGE_API_KEY=your_presage_api_key_optional
 ```
@@ -97,7 +98,8 @@ PRESAGE_API_KEY=your_presage_api_key_optional
 ### Environment variable notes
 
 - `MONGODB_URI` - required for lab report API routes.
-- `GEMINI_API_KEY` - required to parse extracted lab text with Gemini.
+- `GEMINI_API_KEY` or `GOOGLE_API_KEY` - required for Gemini-powered lab parsing and meal image analysis.
+- `USDA_API_KEY` - required for grounded meal nutrition lookup via USDA FoodData Central.
 - `BLOB_READ_WRITE_TOKEN` - required for `@vercel/blob` uploads in `/api/lab-reports`.
 - `PRESAGE_API_KEY` - used by `/api/vitals` POST flow; optional unless using the Presage vitals upload flow.
 

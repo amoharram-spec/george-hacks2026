@@ -39,6 +39,9 @@ export const NUTRITION_GOALS: {
   },
 ];
 
+/**
+ * Represents the baseline input data required to calculate a user's BMR and TDEE.
+ */
 export type TdeeInput = {
   weightKg: number;
   heightCm: number;
@@ -48,6 +51,10 @@ export type TdeeInput = {
   goal: NutritionGoal;
 };
 
+/**
+ * Output of the TDEE calculation containing BMR, TDEE, macronutrient
+ * target notes, and recommended daily ranges.
+ */
 export type TdeeResult = {
   bmr: number;
   tdee: number;
@@ -63,17 +70,40 @@ function roundCalories(n: number): number {
   return Math.round(n / 10) * 10;
 }
 
+/**
+ * Calculates the Basal Metabolic Rate (BMR) using the widely accepted Mifflin-St Jeor equation.
+ * This equation estimates the number of calories your body burns at rest.
+ * 
+ * Equations:
+ * Male: (10 × weight in kg) + (6.25 × height in cm) - (5 × age in years) + 5
+ * Female: (10 × weight in kg) + (6.25 × height in cm) - (5 × age in years) - 161
+ *
+ * @param input - Contains user's `weightKg`, `heightCm`, `ageYears`, and `sex`. 
+ * @returns The estimated daily resting calorie burn (BMR).
+ */
 export function bmrMifflinStJeor(input: Pick<TdeeInput, "weightKg" | "heightCm" | "ageYears" | "sex">): number {
   const { weightKg, heightCm, ageYears, sex } = input;
   const base = 10 * weightKg + 6.25 * heightCm - 5 * ageYears;
   return sex === "male" ? base + 5 : base - 161;
 }
 
+/**
+ * Returns a static activity multiplier based on predefined constants.
+ * The total daily energy expenditure (TDEE) uses this factor.
+ */
 export function activityMultiplier(activity: ActivityLevel): number {
   const row = ACTIVITY_LEVELS.find((a) => a.id === activity);
   return row?.multiplier ?? 1.2;
 }
 
+/**
+ * Computes all relevant TDEE values: BMR, maintenance TDEE, and a goal-oriented 
+ * daily target based on whether the user wants to lose weight, gain muscle, or hold steady.
+ * Sets lower and upper ranges for safe macro guidelines (protein density differs per goal).
+ * 
+ * @param input - The `TdeeInput` object with the user's biological measurements, activity level, and goals.
+ * @returns An object of type `TdeeResult` representing tailored nutritional constraints.
+ */
 export function calculateTdee(input: TdeeInput): TdeeResult {
   const bmr = bmrMifflinStJeor(input);
   const mult = activityMultiplier(input.activity);
