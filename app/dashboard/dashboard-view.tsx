@@ -6,7 +6,7 @@ import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent
 
 import { readStoredTdeeResult } from "@/lib/tdee-storage";
 
-import type { AIInsight, DashboardData, DailyMetric, Meal, Micronutrient, ProposedAdjustment } from "./types";
+import type { DashboardData, DailyMetric, Meal, Micronutrient } from "./types";
 
 type DashboardViewProps = {
   data: DashboardData;
@@ -16,6 +16,28 @@ type MealScanResponse = {
   mealScanId: string;
   dashboardData: DashboardData;
   error?: string;
+};
+
+type AIInsight = {
+  summary: {
+    deficiencies: Array<{
+      marker: string;
+      value: string;
+      status: string;
+      impact: string;
+    }>;
+    trends: string;
+  };
+  strategy: {
+    priorityNutrients: string[];
+    explanation: string;
+  };
+  proposedAdjustments: Array<{
+    metric: string;
+    recommendedTarget: number;
+    unit: string;
+    reasoning: string;
+  }>;
 };
 
 const primaryMicronutrientLabels = new Set([
@@ -61,18 +83,37 @@ function formatConfidence(confidence: number | null) {
   return `${Math.round(confidence * 100)}%`;
 }
 
-function getMicronutrientStatus(consumed: number, target: number): Micronutrient["status"] {
-  const progress = target === 0 ? 0 : (consumed / target) * 100;
+function formatInsightForCopy(insight: AIInsight) {
+  const sections = [
+    "Bloodwork Insight Report",
+    "",
+    "Clinical Summary",
+    insight.summary.trends || "No summary available.",
+    "",
+    "Deficiencies",
+    insight.summary.deficiencies.length > 0
+      ? insight.summary.deficiencies
+          .map((item) => `- ${item.marker}: ${item.status}${item.value ? ` (${item.value})` : ""}${item.impact ? ` - ${item.impact}` : ""}`)
+          .join("\n")
+      : "- No specific deficiencies identified.",
+    "",
+    "Priority Nutrients",
+    insight.strategy.priorityNutrients.length > 0
+      ? insight.strategy.priorityNutrients.map((item) => `- ${item}`).join("\n")
+      : "- None listed.",
+    "",
+    "Strategy",
+    insight.strategy.explanation || "No strategy explanation available.",
+    "",
+    "Recommended Adjustments",
+    insight.proposedAdjustments.length > 0
+      ? insight.proposedAdjustments
+          .map((item) => `- ${item.metric}: ${item.recommendedTarget}${item.unit}${item.reasoning ? ` - ${item.reasoning}` : ""}`)
+          .join("\n")
+      : "- No adjustments proposed.",
+  ];
 
-  if (progress > 110) {
-    return "exceeded";
-  }
-
-  if (progress < 90) {
-    return "low";
-  }
-
-  return "on track";
+  return sections.join("\n");
 }
 
 function normalizeInsight(input: unknown): AIInsight | null {
@@ -123,17 +164,6 @@ function normalizeInsight(input: unknown): AIInsight | null {
       ? candidate.proposed_adjustments
       : [];
 
-  const proposedAdjustments = rawAdjustments
-    .filter((item): item is { metric: string; unit: string; reasoning: string; recommendedTarget?: number; recommended_target?: number } =>
-      Boolean(item?.metric) && Boolean(item?.unit),
-    )
-    .map((item) => ({
-      metric: item.metric,
-      recommendedTarget: item.recommendedTarget ?? item.recommended_target ?? 0,
-      unit: item.unit,
-      reasoning: item.reasoning ?? "",
-    }));
-
   return {
     summary: {
       deficiencies,
@@ -143,9 +173,19 @@ function normalizeInsight(input: unknown): AIInsight | null {
       priorityNutrients: candidate.strategy?.priorityNutrients ?? candidate.strategy?.priority_nutrients ?? [],
       explanation: candidate.strategy?.explanation ?? "",
     },
-    proposedAdjustments,
+    proposedAdjustments: rawAdjustments
+      .filter((item): item is { metric: string; unit: string; reasoning?: string; recommendedTarget?: number; recommended_target?: number } =>
+        Boolean(item?.metric) && Boolean(item?.unit),
+      )
+      .map((item) => ({
+        metric: item.metric,
+        recommendedTarget: item.recommendedTarget ?? item.recommended_target ?? 0,
+        unit: item.unit,
+        reasoning: item.reasoning ?? "",
+      })),
   };
 }
+
 
 function CaloriesCard({ metric }: { metric: DailyMetric }) {
   const progress = getPercent(metric.consumed, metric.target);
@@ -500,156 +540,202 @@ function LiveVitalsCard() {
   );
 }
 
-function AIHealthInsightsCard({ 
-  insight, 
-  loading, 
-  onAccept 
-}: { 
+function InsightReportModal({
+  insight,
+  open,
+  loading,
+  copied,
+  onClose,
+  onCopy,
+}: {
   insight: AIInsight | null;
+  open: boolean;
   loading: boolean;
-  onAccept: (adjustment: ProposedAdjustment) => void;
+  copied: boolean;
+  onClose: () => void;
+  onCopy: () => void;
 }) {
-  const deficiencies = insight?.summary.deficiencies ?? [];
-  const proposedAdjustments = insight?.proposedAdjustments ?? [];
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open]);
 
   return (
-    <article className="group relative overflow-hidden rounded-[2.5rem] border border-white/80 bg-white/95 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.12)] backdrop-blur-md transition-all hover:shadow-[0_25px_60px_rgba(15,23,42,0.18)]">
-      {/* Decorative medical-style gradient accent */}
-      <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-emerald-500/5 blur-3xl transition-all group-hover:bg-emerald-500/10" />
-      
-      <div className="relative z-10">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex flex-col gap-1">
-            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-zinc-400">Clinical Persona</p>
-            <h3 className="text-sm font-bold text-zinc-950">AI Bioinformatician</h3>
-          </div>
-          <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm transition-all ${loading ? 'bg-amber-100 text-amber-700 animate-pulse' : insight ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}>
-            {loading ? 'Analyzing Bloodwork' : insight ? 'Clinical Active' : 'Waiting for Data'}
-          </div>
-        </div>
-
-        <AnimatePresence mode="wait">
-          {!insight && !loading ? (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex flex-col items-center py-6 text-center"
-            >
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-50 text-zinc-400">
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <p className="text-sm text-zinc-500 leading-relaxed max-w-[200px] mb-6">Upload your lab results during onboarding to generate clinical insights.</p>
-              <Link 
-                href="/onboarding"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-zinc-800 text-white font-bold rounded-xl text-xs transition active:scale-95 shadow-lg shadow-zinc-950/20"
-              >
-                Start Onboarding
-                <span className="text-zinc-400">→</span>
-              </Link>
-            </motion.div>
-          ) : loading ? (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex flex-col items-center py-10"
-            >
-              <div className="relative mb-6">
-                <div className="h-12 w-12 rounded-full border-4 border-zinc-100 border-t-emerald-500 animate-spin" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                </div>
-              </div>
-              <p className="text-sm font-bold text-zinc-950 tracking-tight">Synthesizing Biomarkers...</p>
-              <p className="mt-1 text-[10px] text-zinc-400 uppercase tracking-widest font-semibold italic">Clinical Grade Protocol</p>
-            </motion.div>
-          ) : (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              className="space-y-5"
-            >
-              <div className="relative overflow-hidden rounded-2xl border border-rose-100/50 bg-rose-50/30 p-4">
-                <div className="absolute -right-4 -top-4 h-16 w-16 rounded-full bg-rose-500/5 blur-xl" />
-                <p className="relative z-10 text-[10px] font-bold text-rose-500 uppercase tracking-[0.2em] mb-3">Deficiencies Map</p>
-                <div className="relative z-10 space-y-2.5">
-                  {deficiencies.map((d) => (
-                    <div key={d.marker} className="flex items-center justify-between gap-3">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold text-zinc-900">{d.marker}</span>
-                        <span className="text-[10px] text-zinc-500">{d.value} detected</span>
-                      </div>
-                      <span className={`text-[10px] px-2 py-0.75 rounded-md font-bold shadow-sm ${
-                        d.status.toLowerCase() === 'deficient' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-700'
-                      }`}>
-                        {d.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="relative overflow-hidden rounded-2xl border border-zinc-200/50 bg-zinc-50/50 p-4">
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em] mb-4">Precision Targets</p>
-                <div className="space-y-4">
-                  {proposedAdjustments.length > 0 ? (
-                    proposedAdjustments.map((adj) => (
-                      <div key={adj.metric} className="group/item relative flex flex-col gap-2 rounded-xl bg-white p-3 border border-zinc-100 shadow-sm transition-all hover:border-emerald-200 hover:shadow-md hover:shadow-emerald-500/5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-zinc-950">{adj.metric}</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-medium text-zinc-400">New Target</span>
-                            <span className="text-xs font-bold text-emerald-600">{adj.recommendedTarget}{adj.unit}</span>
-                          </div>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed">
-                          <span className="font-bold text-zinc-400">Reason: </span>
-                          {adj.reasoning}
-                        </p>
-                        <button 
-                          onClick={() => onAccept(adj)}
-                          className="mt-1 flex items-center justify-center gap-2 w-full py-2 bg-zinc-950 hover:bg-emerald-600 text-white text-[10px] font-bold rounded-lg transition-all duration-300 active:scale-95 shadow-md shadow-zinc-950/10 hover:shadow-emerald-500/20"
-                        >
-                          Accept Adjustment
-                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex flex-col items-center py-2 text-center">
-                      <div className="h-2 w-2 rounded-full bg-emerald-500 mb-2 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Profile Optimized</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="px-1">
-                <p className="text-[9px] text-zinc-400 leading-relaxed text-center italic">
-                  Note: Adjustments are temporary for the current session. Reference medical professional before permanent dietary changes.
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/35 px-4 py-6 backdrop-blur-sm"
+          onClick={onClose}
+        >
+          <motion.section
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] border border-white/80 bg-[#f6f4ef] shadow-[0_24px_80px_rgba(15,23,42,0.22)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-200/80 px-6 py-5 sm:px-7">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-400">Bloodwork Report</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-950">AI clinical insights</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
+                  Review the report generated from your latest bloodwork analysis.
                 </p>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </article>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onCopy}
+                  disabled={!insight || loading}
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition hover:border-zinc-300 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {copied ? "Copied" : "Copy insights"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-500 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-800"
+                  aria-label="Close report"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="scrollbar-fade flex-1 overflow-y-auto px-6 py-5 sm:px-7">
+              {loading ? (
+                <div className="flex min-h-[320px] flex-col items-center justify-center text-center">
+                  <div className="h-12 w-12 rounded-full border-4 border-zinc-200 border-t-emerald-500 animate-spin" />
+                  <p className="mt-5 text-sm font-semibold text-zinc-950">Generating report...</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.2em] text-zinc-400">Clinical synthesis in progress</p>
+                </div>
+              ) : !insight ? (
+                <div className="flex min-h-[320px] flex-col items-center justify-center text-center">
+                  <div className="rounded-[1.6rem] border border-dashed border-zinc-200 bg-white/80 px-6 py-8">
+                    <p className="text-sm font-semibold text-zinc-900">No bloodwork report yet</p>
+                    <p className="mt-2 max-w-md text-sm leading-6 text-zinc-500">
+                      Upload and analyze a lab report in onboarding to view the AI-generated plan here.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  <section className="rounded-[1.75rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">Clinical Summary</p>
+                    <p className="mt-3 text-sm leading-7 text-zinc-700">{insight.summary.trends || "No summary available."}</p>
+                  </section>
+
+                  <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+                    <section className="rounded-[1.75rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">Deficiencies</p>
+                      <div className="mt-4 space-y-3">
+                        {insight.summary.deficiencies.length > 0 ? (
+                          insight.summary.deficiencies.map((item) => (
+                            <article key={`${item.marker}-${item.value}`} className="rounded-[1.25rem] border border-rose-100 bg-rose-50/70 px-4 py-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-zinc-950">{item.marker}</p>
+                                  {item.value ? <p className="mt-1 text-xs text-zinc-500">Observed value: {item.value}</p> : null}
+                                </div>
+                                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-rose-600 shadow-sm">
+                                  {item.status}
+                                </span>
+                              </div>
+                              {item.impact ? <p className="mt-3 text-sm leading-6 text-zinc-600">{item.impact}</p> : null}
+                            </article>
+                          ))
+                        ) : (
+                          <p className="rounded-[1.25rem] bg-zinc-50 px-4 py-4 text-sm text-zinc-500">No specific deficiencies were listed.</p>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="rounded-[1.75rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">Priority Nutrients</p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {insight.strategy.priorityNutrients.length > 0 ? (
+                          insight.strategy.priorityNutrients.map((item) => (
+                            <span key={item} className="rounded-full bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                              {item}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="rounded-full bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-500">None listed</span>
+                        )}
+                      </div>
+                      <div className="mt-5 rounded-[1.25rem] bg-zinc-50 px-4 py-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Strategy</p>
+                        <p className="mt-2 text-sm leading-6 text-zinc-600">{insight.strategy.explanation || "No strategy explanation available."}</p>
+                      </div>
+                    </section>
+                  </div>
+
+                  <section className="rounded-[1.75rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">Recommended Targets</p>
+                        <h3 className="mt-2 text-xl font-semibold tracking-tight text-zinc-950">Nutrition adjustments from the report</h3>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-3">
+                      {insight.proposedAdjustments.length > 0 ? (
+                        insight.proposedAdjustments.map((item) => (
+                          <article key={item.metric} className="rounded-[1.25rem] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="text-sm font-semibold text-zinc-950">{item.metric}</p>
+                                {item.reasoning ? <p className="mt-2 text-sm leading-6 text-zinc-600">{item.reasoning}</p> : null}
+                              </div>
+                              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-sm">
+                                {item.recommendedTarget}{item.unit}
+                              </span>
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <p className="rounded-[1.25rem] bg-zinc-50 px-4 py-4 text-sm text-zinc-500">No target changes were proposed.</p>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )}
+            </div>
+          </motion.section>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 
-
 export function DashboardView({ data }: DashboardViewProps) {
   const [uploadedDashboardData, setUploadedDashboardData] = useState<DashboardData | null>(null);
-  const [acceptedAdjustments, setAcceptedAdjustments] = useState<ProposedAdjustment[]>([]);
-  const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
-  const [insightLoading, setInsightLoading] = useState(true);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [mealUploading, setMealUploading] = useState(false);
   const [mealUploadError, setMealUploadError] = useState("");
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [copiedReport, setCopiedReport] = useState(false);
+  const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [hasLoadedInsight, setHasLoadedInsight] = useState(false);
   const [activeScrollArea, setActiveScrollArea] = useState<"left" | "right" | "meals" | null>(null);
   const [calorieTargetOverride] = useState<number | null>(() => readStoredTdeeResult()?.targetCalories ?? null);
   const leftSidebarRef = useRef<HTMLElement | null>(null);
@@ -659,88 +745,24 @@ export function DashboardView({ data }: DashboardViewProps) {
 
   const dashboardData = useMemo<DashboardData>(() => {
     const baseData = uploadedDashboardData ?? data;
-    const adjustedData = {
-      ...baseData,
-      dailySummary: baseData.dailySummary.map((metric) => ({ ...metric })),
-      supportMetrics: baseData.supportMetrics.map((metric) => ({ ...metric })),
-      micronutrients: baseData.micronutrients.map((nutrient) => ({ ...nutrient })),
-    };
-
-    acceptedAdjustments.forEach((adjustment) => {
-      const summaryMetric = adjustedData.dailySummary.find(
-        (metric) => metric.label.toLowerCase() === adjustment.metric.toLowerCase(),
-      );
-
-      if (summaryMetric) {
-        summaryMetric.target = adjustment.recommendedTarget;
-      }
-
-      const micronutrient = adjustedData.micronutrients.find(
-        (metric) => metric.label.toLowerCase() === adjustment.metric.toLowerCase(),
-      );
-
-      if (micronutrient) {
-        micronutrient.target = adjustment.recommendedTarget;
-        micronutrient.status = getMicronutrientStatus(micronutrient.consumed, micronutrient.target);
-      }
-    });
 
     if (calorieTargetOverride === null) {
-      return adjustedData;
+      return baseData;
     }
 
     return {
-      ...adjustedData,
-      dailySummary: adjustedData.dailySummary.map((metric) =>
+      ...baseData,
+      dailySummary: baseData.dailySummary.map((metric) =>
         metric.label === "Calories" ? { ...metric, target: calorieTargetOverride } : metric,
       ),
-      supportMetrics: adjustedData.supportMetrics.map((metric) =>
+      supportMetrics: baseData.supportMetrics.map((metric) =>
         metric.label === "Calories" ? { ...metric, target: calorieTargetOverride } : metric,
       ),
     };
-  }, [acceptedAdjustments, calorieTargetOverride, data, uploadedDashboardData]);
+  }, [calorieTargetOverride, data, uploadedDashboardData]);
 
   const calories = dashboardData.dailySummary.find((metric) => metric.label === "Calories");
   const water = dashboardData.supportMetrics.find((metric) => metric.label === "Water");
-
-  useEffect(() => {
-    const fetchLatestInsight = async () => {
-      try {
-        const res = await fetch("/api/lab-reports/latest");
-        if (res.ok) {
-          const { analysis } = await res.json();
-          setAiInsight(normalizeInsight(analysis));
-        }
-      } catch (err) {
-        console.error("Failed to fetch latest insight", err);
-      } finally {
-        setInsightLoading(false);
-      }
-    };
-
-    fetchLatestInsight();
-  }, []);
-
-  const handleAcceptAdjustment = (adjustment: ProposedAdjustment) => {
-    setAcceptedAdjustments((current) => {
-      if (current.some((item) => item.metric === adjustment.metric)) {
-        return current;
-      }
-
-      return [...current, adjustment];
-    });
-
-    setAiInsight((current) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        proposedAdjustments: current.proposedAdjustments.filter((item) => item.metric !== adjustment.metric),
-      };
-    });
-  };
 
   useEffect(() => {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -826,6 +848,13 @@ export function DashboardView({ data }: DashboardViewProps) {
   };
 
   const handleQuickAction = (action: string) => {
+    if (action === "View Plan") {
+      setActionsOpen(false);
+      setCopiedReport(false);
+      setReportModalOpen(true);
+      return;
+    }
+
     if (action !== "Upload Picture of meal" && action !== "Scanning meal...") {
       return;
     }
@@ -833,6 +862,66 @@ export function DashboardView({ data }: DashboardViewProps) {
     setMealUploadError("");
     mealFileInputRef.current?.click();
   };
+
+  const handleOpenReport = () => {
+    setCopiedReport(false);
+    setReportModalOpen(true);
+  };
+
+  const handleCopyReport = async () => {
+    if (!aiInsight) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(formatInsightForCopy(aiInsight));
+      setCopiedReport(true);
+      window.setTimeout(() => {
+        setCopiedReport(false);
+      }, 1800);
+    } catch (error) {
+      console.error("Failed to copy report insight", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!reportModalOpen || hasLoadedInsight) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadInsight = async () => {
+      setInsightLoading(true);
+
+      try {
+        const response = await fetch("/api/lab-reports/latest", { cache: "no-store" });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as { analysis?: unknown };
+
+        if (!cancelled) {
+          setAiInsight(normalizeInsight(payload.analysis));
+        }
+      } catch (error) {
+        console.error("Failed to load bloodwork insight", error);
+      } finally {
+        if (!cancelled) {
+          setHasLoadedInsight(true);
+          setInsightLoading(false);
+        }
+      }
+    };
+
+    loadInsight();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasLoadedInsight, reportModalOpen]);
 
   if (!calories || !water) {
     return null;
@@ -866,12 +955,7 @@ export function DashboardView({ data }: DashboardViewProps) {
           ref={rightColumnRef}
           className={`scrollbar-fade flex min-h-0 flex-col lg:h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-2 ${activeScrollArea === "right" ? "scrollbar-fade-active" : ""}`}
         >
-          <AIHealthInsightsCard 
-            insight={aiInsight} 
-            loading={insightLoading}
-            onAccept={handleAcceptAdjustment}
-          />
-          <section className="flex min-h-0 flex-1 flex-col rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:min-h-[720px] mt-5">
+          <section className="flex min-h-0 flex-1 flex-col rounded-[2rem] border border-white/80 bg-white/95 p-5 shadow-[0_14px_40px_rgba(15,23,42,0.08)] lg:min-h-[720px]">
             <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Today&apos;s meals</p>
@@ -914,8 +998,24 @@ export function DashboardView({ data }: DashboardViewProps) {
               </div>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={handleOpenReport}
+            className="mt-5 w-full rounded-xl bg-zinc-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-zinc-800"
+          >
+            {dashboardData.recommendation.ctaLabel}
+          </button>
         </section>
       </div>
+
+      <InsightReportModal
+        insight={aiInsight}
+        open={reportModalOpen}
+        loading={insightLoading}
+        copied={copiedReport}
+        onClose={() => setReportModalOpen(false)}
+        onCopy={handleCopyReport}
+      />
 
       <input
         ref={mealFileInputRef}

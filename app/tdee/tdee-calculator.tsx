@@ -49,6 +49,10 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
   const resultPanelClass = embedded
     ? "rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6"
     : "rounded-[1.9rem] border border-white/80 bg-white/95 p-6 shadow-[0_14px_40px_rgba(15,23,42,0.08)]";
+  const titleTextClass = embedded ? "text-black" : "text-zinc-950";
+  const bodyTextClass = embedded ? "text-black/85" : "text-zinc-700";
+  const helperTextClass = embedded ? "text-black/70" : "text-zinc-500";
+  const subtleTextClass = embedded ? "text-black/55" : "text-zinc-400";
   const [units, setUnits] = useState<UnitSystem>("metric");
   const [weight, setWeight] = useState("");
   const [heightCm, setHeightCm] = useState("");
@@ -133,12 +137,12 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
       {!embedded && (
         <div className="mb-8 flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Nutrition</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-950">TDEE calculator</h1>
+            <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${subtleTextClass}`}>Nutrition</p>
+            <h1 className={`mt-1 text-2xl font-semibold tracking-tight ${titleTextClass}`}>TDEE calculator</h1>
           </div>
           <Link
             href="/dashboard"
-            className="shrink-0 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
+            className="shrink-0 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-black shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
           >
             Dashboard
           </Link>
@@ -147,9 +151,9 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
 
       {embedded && (
         <div className="mb-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Daily energy</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-zinc-950">TDEE &amp; calorie target</h2>
-          <p className="mt-1 text-sm text-zinc-600">
+          <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${subtleTextClass}`}>Daily energy</p>
+          <h2 className={`mt-1 text-lg font-semibold tracking-tight ${titleTextClass}`}>TDEE &amp; calorie target</h2>
+          <p className={`mt-1 text-sm ${bodyTextClass}`}>
             We use your body stats and goal to estimate maintenance calories and a sensible daily target.
           </p>
         </div>
@@ -168,7 +172,7 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
               type="button"
               onClick={() => setUnits(u.id)}
               className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${
-                units === u.id ? "bg-zinc-950 text-white shadow-sm" : "text-zinc-600 hover:bg-zinc-50"
+                units === u.id ? "bg-zinc-950 text-white shadow-sm" : "text-black/70 hover:bg-zinc-50"
               }`}
             >
               {u.label}
@@ -178,7 +182,7 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block sm:col-span-2">
-            <span className="text-sm font-medium text-zinc-700">Weight ({units === "metric" ? "kg" : "lb"})</span>
+            <span className={`text-sm font-medium ${bodyTextClass}`}>Weight ({units === "metric" ? "kg" : "lb"})</span>
             <input
               type="number"
               inputMode="decimal"
@@ -193,7 +197,7 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
 
           {units === "metric" ? (
             <label className="block sm:col-span-2">
-              <span className="text-sm font-medium text-zinc-700">Height (cm)</span>
+              <span className={`text-sm font-medium ${bodyTextClass}`}>Height (cm)</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -206,10 +210,10 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
             </label>
           ) : (
             <div className="sm:col-span-2">
-              <span className="text-sm font-medium text-zinc-700">Height</span>
+              <span className={`text-sm font-medium ${bodyTextClass}`}>Height</span>
               <div className="mt-1.5 flex gap-3">
                 <label className="flex flex-1 flex-col">
-                  <span className="text-xs text-zinc-500">ft</span>
+                  <span className={`text-xs ${helperTextClass}`}>ft</span>
                   <input
                     type="number"
                     inputMode="numeric"
@@ -222,7 +226,7 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
                   />
                 </label>
                 <label className="flex flex-1 flex-col">
-                  <span className="text-xs text-zinc-500">in</span>
+                  <span className={`text-xs ${helperTextClass}`}>in</span>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -240,7 +244,7 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
           )}
 
           <label className="block">
-            <span className="text-sm font-medium text-zinc-700">Age (years)</span>
+            <span className={`text-sm font-medium ${bodyTextClass}`}>Age (years)</span>
             <input
               type="number"
               inputMode="numeric"
@@ -254,7 +258,7 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
           </label>
 
           <fieldset className="block">
-            <legend className="text-sm font-medium text-zinc-700">Sex (for BMR equation)</legend>
+            <legend className={`text-sm font-medium ${bodyTextClass}`}>Sex (for BMR equation)</legend>
             <div className="mt-1.5 flex gap-2">
               {(["male", "female"] as const).map((s) => (
                 <button
@@ -264,7 +268,7 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
                   className={`flex-1 rounded-xl border py-3 text-sm font-semibold capitalize transition ${
                     sex === s
                       ? "border-zinc-950 bg-zinc-950 text-white"
-                      : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                      : "border-zinc-200 bg-white text-black/75 hover:bg-zinc-50"
                   }`}
                 >
                   {s}
@@ -275,7 +279,7 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
         </div>
 
         <div>
-          <span className="text-sm font-medium text-zinc-700">Activity level</span>
+            <span className={`text-sm font-medium ${bodyTextClass}`}>Activity level</span>
           <div className="mt-2 space-y-2">
             {ACTIVITY_LEVELS.map((lvl) => (
               <label
@@ -294,14 +298,14 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
                   />
                   <span className="font-semibold text-zinc-900">{lvl.label}</span>
                 </div>
-                <span className="mt-1 pl-7 text-xs text-zinc-500">{lvl.description}</span>
+                <span className={`mt-1 pl-7 text-xs ${helperTextClass}`}>{lvl.description}</span>
               </label>
             ))}
           </div>
         </div>
 
         <div>
-          <span className="text-sm font-medium text-zinc-700">Goal</span>
+            <span className={`text-sm font-medium ${bodyTextClass}`}>Goal</span>
           <div className="mt-2 space-y-2">
             {NUTRITION_GOALS.map((g) => (
               <label
@@ -320,7 +324,7 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
                   />
                   <span className="font-semibold text-zinc-900">{g.label}</span>
                 </div>
-                <span className="mt-1 pl-7 text-xs text-zinc-600">{g.description}</span>
+                <span className={`mt-1 pl-7 text-xs ${bodyTextClass}`}>{g.description}</span>
               </label>
             ))}
           </div>
@@ -328,41 +332,41 @@ export function TdeeCalculator({ variant = "page", onMetricsChange, onResultChan
       </div>
 
       <section className={`${resultPanelClass} ${embedded ? "mt-4" : "mt-6"}`}>
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Estimate</p>
+        <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${subtleTextClass}`}>Estimate</p>
         {!result ? (
-          <p className="mt-3 text-sm leading-6 text-zinc-500">
+          <p className={`mt-3 text-sm leading-6 ${helperTextClass}`}>
             Enter valid weight, height, and age (13–100) to see BMR, TDEE, and a calorie target aligned with your goal.
           </p>
         ) : (
           <div className="mt-4 space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl bg-zinc-50 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">BMR</p>
-                <p className="mt-1 text-2xl font-semibold text-zinc-950">{result.bmr}</p>
-                <p className="text-xs text-zinc-500">kcal/day at rest</p>
+                <p className={`text-[11px] font-semibold uppercase tracking-wider ${subtleTextClass}`}>BMR</p>
+                <p className={`mt-1 text-2xl font-semibold ${titleTextClass}`}>{result.bmr}</p>
+                <p className={`text-xs ${helperTextClass}`}>kcal/day at rest</p>
               </div>
               <div className="rounded-2xl bg-zinc-50 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">TDEE</p>
-                <p className="mt-1 text-2xl font-semibold text-zinc-950">{result.tdee}</p>
-                <p className="text-xs text-zinc-500">kcal/day maintenance</p>
+                <p className={`text-[11px] font-semibold uppercase tracking-wider ${subtleTextClass}`}>TDEE</p>
+                <p className={`mt-1 text-2xl font-semibold ${titleTextClass}`}>{result.tdee}</p>
+                <p className={`text-xs ${helperTextClass}`}>kcal/day maintenance</p>
               </div>
             </div>
             <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-rose-700/80">Suggested intake</p>
-              <p className="mt-1 text-3xl font-semibold text-zinc-950">{result.targetCalories}</p>
-              <p className="mt-1 text-sm text-zinc-600">
-                Typical range: <span className="font-semibold text-zinc-800">{result.rangeMin}</span>–
-                <span className="font-semibold text-zinc-800">{result.rangeMax}</span> kcal/day
+              <p className={`text-[11px] font-semibold uppercase tracking-wider ${embedded ? "text-black/70" : "text-rose-700/80"}`}>Suggested intake</p>
+              <p className={`mt-1 text-3xl font-semibold ${titleTextClass}`}>{result.targetCalories}</p>
+              <p className={`mt-1 text-sm ${bodyTextClass}`}>
+                Typical range: <span className="font-semibold text-black">{result.rangeMin}</span>–
+                <span className="font-semibold text-black">{result.rangeMax}</span> kcal/day
               </p>
             </div>
             {proteinRange && (
-              <p className="text-sm leading-6 text-zinc-600">
-                <span className="font-semibold text-zinc-800">Protein ballpark:</span> about {proteinRange.minG}–{proteinRange.maxG}
+              <p className={`text-sm leading-6 ${bodyTextClass}`}>
+                <span className="font-semibold text-black">Protein ballpark:</span> about {proteinRange.minG}–{proteinRange.maxG}
                 g/day (from your entered weight).
               </p>
             )}
-            <p className="text-sm leading-6 text-zinc-600">{result.goalNotes}</p>
-            <p className="text-xs leading-5 text-zinc-400">
+            <p className={`text-sm leading-6 ${bodyTextClass}`}>{result.goalNotes}</p>
+            <p className={`text-xs leading-5 ${subtleTextClass}`}>
               Estimates use the Mifflin–St Jeor equation and standard activity factors. They are not medical advice; use
               professional guidance for conditions, medications, and lab targets.
             </p>

@@ -41,6 +41,7 @@ export async function GET(
       textPreview: getTextPreview(report.extractedText),
       parsedLabs: report.parsedLabs,
       parseWarnings: report.parseWarnings,
+      analysis: report.analysis ?? null,
       errorMessage: report.errorMessage,
     });
   } catch (error) {

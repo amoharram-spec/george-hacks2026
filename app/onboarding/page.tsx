@@ -215,7 +215,7 @@ export default function OnboardingPage() {
           className="space-y-5"
         >
           <div>
-            <label htmlFor="name" className="mb-2 block text-sm font-medium text-gray-900">
+            <label htmlFor="name" className="mb-2 block text-sm font-medium text-black">
               Full Name
             </label>
             <input
@@ -227,7 +227,7 @@ export default function OnboardingPage() {
                 resetCurrentError();
               }}
               placeholder="Enter your full name"
-              className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm font-medium text-zinc-950 outline-none shadow-sm transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 placeholder:text-zinc-400"
+              className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-4 text-sm font-medium text-black outline-none shadow-sm transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 placeholder:text-black/35"
             />
           </div>
         </motion.div>
@@ -263,7 +263,7 @@ export default function OnboardingPage() {
         className="space-y-4"
       >
         <div>
-          <label htmlFor="pdf" className="mb-2 block text-sm font-medium text-gray-900">
+            <label htmlFor="pdf" className="mb-2 block text-sm font-medium text-black">
             Lab Report PDF
           </label>
           <input
@@ -274,8 +274,8 @@ export default function OnboardingPage() {
             className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm"
           />
 
-          <p className="mt-2 text-xs text-gray-500">
-            Your clinical data will be analyzed by our AI Bioinformatician.
+          <p className="mt-2 text-xs text-black/70">
+            Your clinical data will be analyzed after upload.
           </p>
 
           {file ? <p className="mt-2 text-sm text-emerald-600">Selected: {file.name}</p> : null}
@@ -290,11 +290,11 @@ export default function OnboardingPage() {
         <section className="rounded-[2.5rem] border border-white/80 bg-white/95 p-8 shadow-[0_20px_50px_rgba(15,23,42,0.12)] backdrop-blur-sm">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-black/70">
                 Step {stepIndex[currentStep]} of 3
               </p>
               <h1 className="mt-2 text-2xl font-bold tracking-tight text-gray-950">{stepTitles[currentStep]}</h1>
-              <p className="mt-2 text-sm leading-6 text-gray-600">{stepDescriptions[currentStep]}</p>
+              <p className="mt-2 text-sm leading-6 text-black/75">{stepDescriptions[currentStep]}</p>
             </div>
           </div>
 
@@ -341,25 +341,25 @@ export default function OnboardingPage() {
         <section className="rounded-[2.5rem] border border-white/80 bg-white/95 p-8 shadow-[0_20px_50px_rgba(15,23,42,0.12)] backdrop-blur-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-gray-950">Onboarding Preview</h2>
-              <p className="mt-2 text-sm leading-6 text-gray-600">
+              <h2 className="text-xl font-bold text-black">Onboarding Preview</h2>
+              <p className="mt-2 text-sm leading-6 text-black/75">
                 Finish the steps and upload your report. Insights will be waiting for you in the dashboard.
               </p>
             </div>
           </div>
 
           {!report ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm leading-6 text-gray-600">
+            <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm leading-6 text-black/75">
               Ready to process your health profile?
             </div>
           ) : (
             <div className="mt-6 space-y-6">
               <div className="rounded-2xl bg-emerald-50 p-6 text-center border border-emerald-100">
                 <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-emerald-700 text-xl font-bold">✓</span>
+                  <span className="text-black text-xl font-bold">✓</span>
                 </div>
-                <h3 className="text-lg font-bold text-emerald-900">Upload Complete</h3>
-                <p className="text-sm text-emerald-700 mt-2 mb-6">Your bloodwork has been successfully extracted.</p>
+                <h3 className="text-lg font-bold text-black">Upload Complete</h3>
+                <p className="mt-2 mb-6 text-sm text-black/75">Your bloodwork has been successfully extracted.</p>
                 <button
                   type="button"
                   onClick={handleParse}

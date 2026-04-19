@@ -7,10 +7,9 @@ export async function GET() {
     const db = await getDatabase();
     const collection = db.collection("labReports");
 
-    // Fetch the most recent document with 'parsed' status
     const latestReport = await collection.findOne(
       { status: "parsed" },
-      { sort: { createdAt: -1 } }
+      { sort: { updatedAt: -1, createdAt: -1 } }
     );
 
     if (!latestReport) {
