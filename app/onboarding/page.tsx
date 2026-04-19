@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useState, type ChangeEvent, type FormEvent } from "react";
+
+type OnboardingStep = "name" | "body" | "labs";
 
 type ParsedLab = {
   key: string;
@@ -33,8 +36,23 @@ function formatLabValue(lab: ParsedLab) {
   return `${lab.value}${lab.unit ? ` ${lab.unit}` : ""}`;
 }
 
+const stepTitles: Record<OnboardingStep, string> = {
+  name: "Let’s start with your name",
+  body: "Now tell us your body metrics",
+  labs: "Upload your lab results",
+};
+
+const stepDescriptions: Record<OnboardingStep, string> = {
+  name: "We’ll use this to personalize your nutrition plan and keep the flow feeling human.",
+  body: "Use metric units so the app can align your plan with your health data cleanly.",
+  labs: "Add your latest PDF report so we can extract markers and connect them to your plan.",
+};
+
 export default function OnboardingPage() {
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>("name");
   const [name, setName] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [weightKg, setWeightKg] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -42,7 +60,19 @@ export default function OnboardingPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [report, setReport] = useState<LabReportResponse | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const stepIndex = { name: 1, body: 2, labs: 3 } as const;
+
+  const canContinueName = name.trim().length > 0;
+  const heightValue = Number(heightCm);
+  const weightValue = Number(weightKg);
+  const canContinueBody = Number.isFinite(heightValue) && heightValue > 0 && Number.isFinite(weightValue) && weightValue > 0;
+  const canSubmitLabs = canContinueName && canContinueBody && Boolean(file);
+
+  const resetCurrentError = () => {
+    if (error) setError("");
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0] || null;
 
     if (!selectedFile) {
@@ -62,10 +92,46 @@ export default function OnboardingPage() {
     setSubmitError("");
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const goToNextStep = () => {
+    if (currentStep === "name") {
+      if (!canContinueName) {
+        setError("Please enter your name to continue.");
+        return;
+      }
+
+      setError("");
+      setCurrentStep("body");
+      return;
+    }
+
+    if (currentStep === "body") {
+      if (!canContinueBody) {
+        setError("Enter a valid height in cm and body weight in kg.");
+        return;
+      }
+
+      setError("");
+      setCurrentStep("labs");
+    }
+  };
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!name.trim() || !file) return;
+    if (currentStep === "name") {
+      goToNextStep();
+      return;
+    }
+
+    if (currentStep === "body") {
+      goToNextStep();
+      return;
+    }
+
+    if (!canSubmitLabs || !file) {
+      setError("Please complete the earlier steps and choose a PDF file.");
+      return;
+    }
 
     setIsUploading(true);
     setSubmitError("");
@@ -73,6 +139,8 @@ export default function OnboardingPage() {
 
     const formData = new FormData();
     formData.append("name", name.trim());
+    formData.append("heightCm", heightCm.trim());
+    formData.append("weightKg", weightKg.trim());
     formData.append("file", file);
 
     try {
@@ -133,69 +201,186 @@ export default function OnboardingPage() {
     }
   };
 
+  const renderStep = () => {
+    if (currentStep === "name") {
+      return (
+        <motion.div
+          key="name"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.28, ease: "easeOut" }}
+          className="space-y-5"
+        >
+          <div>
+            <label htmlFor="name" className="mb-2 block text-sm font-medium text-gray-900">
+              Full Name
+            </label>
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                resetCurrentError();
+              }}
+              placeholder="Enter your full name"
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/10"
+            />
+          </div>
+        </motion.div>
+      );
+    }
+
+    if (currentStep === "body") {
+      return (
+        <motion.div
+          key="body"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.28, ease: "easeOut" }}
+          className="grid gap-4 sm:grid-cols-2"
+        >
+          <div>
+            <label htmlFor="heightCm" className="mb-2 block text-sm font-medium text-gray-900">
+              Height (cm)
+            </label>
+            <input
+              id="heightCm"
+              type="number"
+              min="1"
+              step="0.1"
+              value={heightCm}
+              onChange={(e) => {
+                setHeightCm(e.target.value);
+                resetCurrentError();
+              }}
+              placeholder="e.g. 178"
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/10"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="weightKg" className="mb-2 block text-sm font-medium text-gray-900">
+              Body Weight (kg)
+            </label>
+            <input
+              id="weightKg"
+              type="number"
+              min="1"
+              step="0.1"
+              value={weightKg}
+              onChange={(e) => {
+                setWeightKg(e.target.value);
+                resetCurrentError();
+              }}
+              placeholder="e.g. 72"
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-black focus:ring-2 focus:ring-black/10"
+            />
+          </div>
+        </motion.div>
+      );
+    }
+
+    return (
+      <motion.div
+        key="labs"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -12 }}
+        transition={{ duration: 0.28, ease: "easeOut" }}
+        className="space-y-4"
+      >
+        <div>
+          <label htmlFor="pdf" className="mb-2 block text-sm font-medium text-gray-900">
+            Lab Report PDF
+          </label>
+          <input
+            id="pdf"
+            type="file"
+            accept=".pdf,application/pdf"
+            onChange={handleFileChange}
+            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm"
+          />
+
+          <p className="mt-2 text-xs text-gray-500">
+            Server upload mode is capped at 4MB so it stays deployable on Vercel.
+          </p>
+
+          {file ? <p className="mt-2 text-sm text-emerald-600">Selected: {file.name}</p> : null}
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <section className="rounded-2xl border bg-white p-8 shadow-md">
-          <h1 className="mb-2 text-center text-2xl font-bold">Get Started</h1>
-          <p className="mb-6 text-center text-sm text-gray-600">
-          Enter your name and upload your bloodwork report as a PDF.
-          </p>
+        <section className="rounded-3xl border bg-white p-8 shadow-md">
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">
+                Step {stepIndex[currentStep]} of 3
+              </p>
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-gray-950">{stepTitles[currentStep]}</h1>
+              <p className="mt-2 text-sm leading-6 text-gray-600">{stepDescriptions[currentStep]}</p>
+            </div>
+          </div>
+
+          <div className="mb-6 grid grid-cols-3 gap-2">
+            {(["name", "body", "labs"] as OnboardingStep[]).map((step) => (
+              <div
+                key={step}
+                className={`h-1.5 rounded-full transition-colors ${stepIndex[step] <= stepIndex[currentStep] ? "bg-black" : "bg-gray-200"}`}
+              />
+            ))}
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label htmlFor="name" className="mb-2 block text-sm font-medium">
-                Full Name
-              </label>
-              <input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your full name"
-                className="w-full rounded-lg border px-4 py-3 focus:outline-none focus:ring-2 focus:ring-black"
-              />
+            <AnimatePresence mode="wait">{renderStep()}</AnimatePresence>
+
+            {error ? <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+
+            {submitError ? <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</p> : null}
+
+            <div className="flex items-center gap-3">
+              {currentStep !== "name" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError("");
+                    setCurrentStep(currentStep === "body" ? "name" : "body");
+                  }}
+                  className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                >
+                  Back
+                </button>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={currentStep === "name" ? !canContinueName : currentStep === "body" ? !canContinueBody : !canSubmitLabs || isUploading}
+                className="flex-1 rounded-xl bg-black py-3 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {currentStep === "name"
+                  ? "Continue"
+                  : currentStep === "body"
+                    ? "Continue"
+                    : isUploading
+                      ? "Uploading and extracting..."
+                      : "Upload and extract text"}
+              </button>
             </div>
-
-            <div>
-              <label htmlFor="pdf" className="mb-2 block text-sm font-medium">
-                Bloodwork PDF
-              </label>
-              <input
-                id="pdf"
-                type="file"
-                accept=".pdf,application/pdf"
-                onChange={handleFileChange}
-                className="w-full rounded-lg border px-4 py-3"
-              />
-
-              <p className="mt-2 text-xs text-gray-500">
-                Server upload mode is capped at 4MB so it stays deployable on Vercel.
-              </p>
-
-              {file && <p className="mt-2 text-sm text-green-600">Selected: {file.name}</p>}
-
-              {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-            </div>
-
-            {submitError && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</p>}
-
-            <button
-              type="submit"
-              disabled={!name.trim() || !file || isUploading}
-              className="w-full rounded-lg bg-black py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isUploading ? "Uploading and extracting..." : "Upload and extract text"}
-            </button>
           </form>
         </section>
 
-        <section className="rounded-2xl border bg-white p-8 shadow-md">
+        <section className="rounded-3xl border bg-white p-8 shadow-md">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold">Lab Report Processing</h2>
-              <p className="mt-2 text-sm text-gray-600">
-                Upload stores the PDF in Vercel Blob, extracts text on the server, and saves the result in MongoDB.
+              <h2 className="text-xl font-bold text-gray-950">Lab Report Processing</h2>
+              <p className="mt-2 text-sm leading-6 text-gray-600">
+                Complete the three-step onboarding flow, then your PDF is uploaded, text is extracted, and lab values are saved for review.
               </p>
             </div>
 
@@ -207,8 +392,8 @@ export default function OnboardingPage() {
           </div>
 
           {!report ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-600">
-              Your extracted text preview and parsed lab values will appear here after upload.
+            <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm leading-6 text-gray-600">
+              Your extracted text preview and parsed lab values will appear here after the final upload step.
             </div>
           ) : (
             <div className="mt-6 space-y-6">
@@ -237,7 +422,7 @@ export default function OnboardingPage() {
 
               <div>
                 <div className="flex items-center justify-between gap-4">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Text Preview</h3>
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-950">Text Preview</h3>
                   {report.status !== "parsed" ? (
                     <button
                       type="button"
@@ -256,10 +441,10 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Parsed Labs</h3>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-950">Parsed Labs</h3>
 
                 {!report.parsedLabs || report.parsedLabs.length === 0 ? (
-                  <div className="mt-3 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-600">
+                  <div className="mt-3 rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-sm text-gray-700">
                     No parsed lab values yet.
                   </div>
                 ) : (
@@ -269,9 +454,9 @@ export default function OnboardingPage() {
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <h4 className="font-semibold text-gray-900">{lab.label}</h4>
-                            <p className="mt-1 text-sm text-gray-600">{formatLabValue(lab)}</p>
+                            <p className="mt-1 text-sm text-gray-700">{formatLabValue(lab)}</p>
                             {lab.referenceRange ? (
-                              <p className="mt-1 text-sm text-gray-500">Reference range: {lab.referenceRange}</p>
+                              <p className="mt-1 text-sm text-gray-700">Reference range: {lab.referenceRange}</p>
                             ) : null}
                           </div>
 
@@ -280,7 +465,7 @@ export default function OnboardingPage() {
                           </span>
                         </div>
 
-                        {lab.sourceText ? <p className="mt-3 text-sm text-gray-600">Source: {lab.sourceText}</p> : null}
+                        {lab.sourceText ? <p className="mt-3 text-sm text-gray-700">Source: {lab.sourceText}</p> : null}
                       </article>
                     ))}
                   </div>
